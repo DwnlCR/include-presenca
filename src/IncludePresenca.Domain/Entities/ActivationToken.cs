@@ -1,0 +1,48 @@
+using System.Security.Cryptography;
+using System.Text;
+
+namespace IncludePresenca.Domain.Entities;
+
+public class ActivationToken
+{
+    public Guid Id {get; private set; }
+    public Guid MemberId {get; private set; }
+    public string TokenHash {get; private set; }
+    public DateTime ExpiresAt {get; private set; }
+    public DateTime? UsedAt {get; private set; }
+
+    private ActivationToken()
+    {
+        TokenHash = null!;
+    }
+
+    public ActivationToken(Guid memberId, string tokenHash, DateTime expiresAt)
+    {
+        if (memberId == Guid.Empty)
+            throw new ArgumentException("Invalid member ID.", nameof(memberId));
+
+        if (string.IsNullOrWhiteSpace(tokenHash))
+            throw new ArgumentException("Token hash is required.", nameof(tokenHash));
+
+        if (expiresAt <= DateTime.UtcNow)
+            throw new ArgumentException("Expiration must be in the future.", nameof(expiresAt));
+
+        Id = Guid.NewGuid();
+        MemberId = memberId;
+        TokenHash = tokenHash;
+        ExpiresAt = expiresAt;
+    }
+
+    public bool IsValid()
+    {
+        return UsedAt is null && DateTime.UtcNow < ExpiresAt;
+    }
+
+    public void Consume()
+    {
+        if (!IsValid())
+            throw new InvalidOperationException("Activation token is invalid or expired.");
+
+        UsedAt = DateTime.UtcNow;
+    }
+}
