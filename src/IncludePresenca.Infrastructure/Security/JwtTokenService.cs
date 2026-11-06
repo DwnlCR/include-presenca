@@ -17,7 +17,7 @@ public class JwtTokenService : IJwtTokenService
         _configuration = configuration;
     }
 
-    public string GenerateAccessToken(Membro member)
+    public string GenerateAccessToken(Member member)
     {
         string key = _configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT key not configured.");

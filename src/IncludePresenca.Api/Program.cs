@@ -1,19 +1,25 @@
+
+using System.Text;
 using IncludePresenca.Api.ExceptionHandlers;
 using IncludePresenca.Application.Interfaces;
 using IncludePresenca.Application.Interfaces.Repositories;
+using IncludePresenca.Application.Interfaces.Security;
+using IncludePresenca.Application.UseCases.Auth;
 using IncludePresenca.Application.UseCases.Identity;
 using IncludePresenca.Infrastructure.Persistence;
 using IncludePresenca.Infrastructure.Persistence.Repositories;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using IncludePresenca.Application.Interfaces.Security;
+using IncludePresenca.Infrastructure.Persistence.Seed;
 using IncludePresenca.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 string jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("JWT key not configured.");
@@ -42,28 +48,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddAuthorization();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
 );
 
-builder.Services.AddScoped<IMembroRepository, MembroRepository>();
+builder.Services.AddScoped<IMemberRepository, MemberRepository>();
+builder.Services.AddScoped<IActivationTokenRepository, ActivationTokenRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddScoped<CreateMemberUseCase>();
-
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
-builder.Services.AddControllers();
-builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IPasswordHasher, Argon2PasswordHasher>();
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IActivationTokenService, ActivationTokenService>();
 
+builder.Services.AddScoped<CreateMemberUseCase>();
 builder.Services.AddScoped<ActivateMemberUseCase>();
+builder.Services.AddScoped<LoginUseCase>();
+
+builder.Services.AddScoped<AdminSeeder>();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    using IServiceScope scope = app.Services.CreateScope();
+
+    AdminSeeder seeder = scope.ServiceProvider.GetRequiredService<AdminSeeder>();
+
+    await seeder.SeedAsync();
+}
 
 app.UseExceptionHandler();
 

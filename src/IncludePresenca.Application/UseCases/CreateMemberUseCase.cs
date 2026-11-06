@@ -1,6 +1,7 @@
 using IncludePresenca.Application.DTOs.Identity;
 using IncludePresenca.Application.Interfaces;
 using IncludePresenca.Application.Interfaces.Repositories;
+using IncludePresenca.Application.Interfaces.Security;
 using IncludePresenca.Domain.Entities;
 using IncludePresenca.Application.Exceptions;
 
@@ -8,18 +9,24 @@ namespace IncludePresenca.Application.UseCases.Identity;
 
 public class CreateMemberUseCase
 {
-    private readonly IMembroRepository _memberRepository;
+    private readonly IMemberRepository _memberRepository;
+    private readonly IActivationTokenRepository _activationTokenRepository;
+    private readonly IActivationTokenService _activationTokenService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateMemberUseCase(
-        IMembroRepository membroRepository,
+        IMemberRepository memberRepository,
+        IActivationTokenRepository activationTokenRepository,
+        IActivationTokenService activationTokenService,
         IUnitOfWork unitOfWork)
     {
-        _memberRepository = membroRepository;
+        _memberRepository = memberRepository;
+        _activationTokenRepository = activationTokenRepository;
+        _activationTokenService = activationTokenService;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Guid> ExecuteAsync(CreateMemberRequest request)
+    public async Task<CreateMemberResponse> ExecuteAsync(CreateMemberRequest request)
     {
         string email = request.Email.Trim().ToLowerInvariant();
 
@@ -28,15 +35,26 @@ public class CreateMemberUseCase
             throw new EmailAlreadyExistsException();
         }
 
-        Membro membro = new Membro(
+        Member member = new Member(
             request.Name,
             email,
             request.Role
         );
 
-        await _memberRepository.AddAsync(membro);
+        string token = _activationTokenService.GenerateToken();
+        string tokenHash = _activationTokenService.HashToken(token);
+
+        ActivationToken activationToken = new ActivationToken(
+            member.Id,
+            tokenHash,
+            DateTime.UtcNow.AddHours(24)
+        );
+
+        await _memberRepository.AddAsync(member);
+        await _activationTokenRepository.AddAsync(activationToken);
+
         await _unitOfWork.SaveChangesAsync();
 
-        return membro.Id;
+        return new CreateMemberResponse(member.Id, token);
     }
 }

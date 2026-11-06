@@ -17,10 +17,39 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.ActivationToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("ActivationTokens", (string)null);
+                });
 
             modelBuilder.Entity("IncludePresenca.Domain.Entities.Membro", b =>
                 {
@@ -58,6 +87,15 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Membros", (string)null);
+                });
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.ActivationToken", b =>
+                {
+                    b.HasOne("IncludePresenca.Domain.Entities.Membro", null)
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

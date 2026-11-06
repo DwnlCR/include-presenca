@@ -21,11 +21,8 @@ public class MembersController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] CreateMemberRequest request)
     {
-        Guid memberId = await _createMemberUseCase.ExecuteAsync(request);
+        CreateMemberResponse response = await _createMemberUseCase.ExecuteAsync(request);
 
-        return StatusCode(StatusCodes.Status201Created, new
-        {
-           Id = memberId
-        });
+        return Created($"/api/members/{response.Id}", response);
     }
 }

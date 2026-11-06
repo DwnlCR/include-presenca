@@ -1,12 +1,13 @@
+
 using IncludePresenca.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace IncludePresenca.Infrastructure.Persistence.Configurations;
 
-public class MembroConfiguration : IEntityTypeConfiguration<Membro>
+public class MembroConfiguration : IEntityTypeConfiguration<Member>
 {
-    public void Configure(EntityTypeBuilder<Membro> builder)
+    public void Configure(EntityTypeBuilder<Member> builder)
     {
         builder.ToTable("Membros");
 
@@ -23,10 +24,12 @@ public class MembroConfiguration : IEntityTypeConfiguration<Membro>
         builder.HasIndex(member => member.Email)
             .IsUnique();
 
-        builder.Property(member => member.SenhaHash)
+        builder.Property(member => member.PasswordHash)
+            .HasColumnName("SenhaHash")
             .HasMaxLength(500);
 
-        builder.Property(member => member.StatusConta)
+        builder.Property(member => member.AccountStatus)
+            .HasColumnName("StatusConta")
             .HasConversion<string>()
             .IsRequired()
             .HasMaxLength(30);

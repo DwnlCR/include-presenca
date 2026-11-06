@@ -4,5 +4,5 @@ namespace IncludePresenca.Application.Interfaces.Security;
 
 public interface IJwtTokenService
 {
-    string GenerateAccessToken(Membro member);
+    string GenerateAccessToken(Member member);
 }
