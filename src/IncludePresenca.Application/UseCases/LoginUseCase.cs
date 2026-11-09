@@ -1,3 +1,4 @@
+
 using IncludePresenca.Application.DTOs.Auth;
 using IncludePresenca.Application.Interfaces.Repositories;
 using IncludePresenca.Application.Interfaces.Security;
@@ -29,16 +30,21 @@ public class LoginUseCase
             string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
         {
-            throw new UnauthorizedAccessException("InvalidCredentials.");
+            throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
         string email = request.Email.Trim().ToLowerInvariant();
 
         Member? member = await _membroRepository.GetByEmailAsync(email);
 
-        if (member == null || 
+        if (member is null ||
             member.AccountStatus != StatusConta.Ativa ||
             string.IsNullOrWhiteSpace(member.PasswordHash))
+        {
+            throw new UnauthorizedAccessException("Invalid credentials.");
+        }
+
+        if (!_passwordHasher.Verify(request.Password, member.PasswordHash))
         {
             throw new UnauthorizedAccessException("Invalid credentials.");
         }

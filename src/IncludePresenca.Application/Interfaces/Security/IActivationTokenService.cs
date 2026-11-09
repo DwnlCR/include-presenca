@@ -1,7 +1,6 @@
+
 namespace IncludePresenca.Application.Interfaces.Security;
 
-public interface IActivationTokenService
+public interface IActivationTokenService : ITokenService
 {
-    string GenerateToken();
-    string HashToken(string token);
 }

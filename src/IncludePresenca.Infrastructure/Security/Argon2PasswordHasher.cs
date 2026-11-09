@@ -22,6 +22,6 @@ public class Argon2PasswordHasher : IPasswordHasher
             return false;
         }
 
-        return Argon2.Verify(password, passwordHash);
+        return Argon2.Verify(passwordHash, password);
     }
 }

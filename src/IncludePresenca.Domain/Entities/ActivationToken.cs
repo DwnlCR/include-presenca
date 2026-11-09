@@ -1,15 +1,13 @@
-using System.Security.Cryptography;
-using System.Text;
 
 namespace IncludePresenca.Domain.Entities;
 
 public class ActivationToken
 {
-    public Guid Id {get; private set; }
-    public Guid MemberId {get; private set; }
-    public string TokenHash {get; private set; }
-    public DateTime ExpiresAt {get; private set; }
-    public DateTime? UsedAt {get; private set; }
+    public Guid Id { get; private set; }
+    public Guid MemberId { get; private set; }
+    public string TokenHash { get; private set; }
+    public DateTime ExpiresAt { get; private set; }
+    public DateTime? UsedAt { get; private set; }
 
     private ActivationToken()
     {
@@ -42,6 +40,14 @@ public class ActivationToken
     {
         if (!IsValid())
             throw new InvalidOperationException("Activation token is invalid or expired.");
+
+        UsedAt = DateTime.UtcNow;
+    }
+
+    public void Invalidate()
+    {
+        if (UsedAt is not null)
+            return;
 
         UsedAt = DateTime.UtcNow;
     }

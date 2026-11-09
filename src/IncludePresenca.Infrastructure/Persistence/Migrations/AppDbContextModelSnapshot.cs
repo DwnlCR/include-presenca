@@ -51,11 +51,17 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                     b.ToTable("ActivationTokens", (string)null);
                 });
 
-            modelBuilder.Entity("IncludePresenca.Domain.Entities.Membro", b =>
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.Member", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("AccountStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("StatusConta");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -67,16 +73,12 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("SenhaHash")
+                    b.Property<string>("PasswordHash")
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("SenhaHash");
 
-                    b.Property<string>("StatusConta")
+                    b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
@@ -89,9 +91,50 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                     b.ToTable("Membros", (string)null);
                 });
 
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("PasswordResetTokens", (string)null);
+                });
+
             modelBuilder.Entity("IncludePresenca.Domain.Entities.ActivationToken", b =>
                 {
-                    b.HasOne("IncludePresenca.Domain.Entities.Membro", null)
+                    b.HasOne("IncludePresenca.Domain.Entities.Member", null)
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("IncludePresenca.Domain.Entities.Member", null)
                         .WithMany()
                         .HasForeignKey("MemberId")
                         .OnDelete(DeleteBehavior.Cascade)

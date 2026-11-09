@@ -1,9 +1,11 @@
+
 using IncludePresenca.Application.DTOs.Identity;
+using IncludePresenca.Application.Exceptions;
 using IncludePresenca.Application.Interfaces;
+using IncludePresenca.Application.Interfaces.Email;
 using IncludePresenca.Application.Interfaces.Repositories;
 using IncludePresenca.Application.Interfaces.Security;
 using IncludePresenca.Domain.Entities;
-using IncludePresenca.Application.Exceptions;
 
 namespace IncludePresenca.Application.UseCases.Identity;
 
@@ -12,17 +14,20 @@ public class CreateMemberUseCase
     private readonly IMemberRepository _memberRepository;
     private readonly IActivationTokenRepository _activationTokenRepository;
     private readonly IActivationTokenService _activationTokenService;
+    private readonly IActivationEmailSender _activationEmailSender;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateMemberUseCase(
         IMemberRepository memberRepository,
         IActivationTokenRepository activationTokenRepository,
         IActivationTokenService activationTokenService,
+        IActivationEmailSender activationEmailSender,
         IUnitOfWork unitOfWork)
     {
         _memberRepository = memberRepository;
         _activationTokenRepository = activationTokenRepository;
         _activationTokenService = activationTokenService;
+        _activationEmailSender = activationEmailSender;
         _unitOfWork = unitOfWork;
     }
 
@@ -55,6 +60,12 @@ public class CreateMemberUseCase
 
         await _unitOfWork.SaveChangesAsync();
 
-        return new CreateMemberResponse(member.Id, token);
+        await _activationEmailSender.SendActivationEmailAsync(
+            member.Email,
+            member.Name,
+            token
+        );
+
+        return new CreateMemberResponse(member.Id);
     }
 }
