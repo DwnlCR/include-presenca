@@ -9,6 +9,6 @@ public interface IMemberRepository
     Task<Member?> GetByEmailAsync(string email);
     Task<bool> ExistsByEmailAsync(string email);
     Task AddAsync(Member member);
-
     Task<bool> ExistsOtherActiveDirectorAsync(Guid memberId);
+    Task<List<Member>> GetActiveMembersAsync();
 }

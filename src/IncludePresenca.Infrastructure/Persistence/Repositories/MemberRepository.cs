@@ -53,4 +53,12 @@ public class MemberRepository : IMemberRepository
             member.AccountStatus == StatusConta.Ativa
         );
     }
+
+    public async Task<List<Member>> GetActiveMembersAsync()
+    {
+        return await _context.Members
+            .AsNoTracking()
+            .Where(member => member.AccountStatus == StatusConta.Ativa)
+            .ToListAsync();
+    }
 }
