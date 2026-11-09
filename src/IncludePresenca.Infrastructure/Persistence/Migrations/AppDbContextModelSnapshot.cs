@@ -51,6 +51,61 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                     b.ToTable("ActivationTokens", (string)null);
                 });
 
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.Event", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsCancelled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartsAt");
+
+                    b.ToTable("Eventos", (string)null);
+                });
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.EventParticipation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("EventId", "MemberId")
+                        .IsUnique();
+
+                    b.ToTable("ParticipacoesEventos", (string)null);
+                });
+
             modelBuilder.Entity("IncludePresenca.Domain.Entities.Member", b =>
                 {
                     b.Property<Guid>("Id")
@@ -130,6 +185,25 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                         .HasForeignKey("MemberId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.EventParticipation", b =>
+                {
+                    b.HasOne("IncludePresenca.Domain.Entities.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("IncludePresenca.Domain.Entities.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+
+                    b.Navigation("Member");
                 });
 
             modelBuilder.Entity("IncludePresenca.Domain.Entities.PasswordResetToken", b =>
