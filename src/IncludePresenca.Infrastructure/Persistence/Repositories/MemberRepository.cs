@@ -1,6 +1,7 @@
 using IncludePresenca.Application.Interfaces.Repositories;
 using IncludePresenca.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using IncludePresenca.Domain.Enums;
 
 namespace IncludePresenca.Infrastructure.Persistence.Repositories;
 
@@ -11,6 +12,14 @@ public class MemberRepository : IMemberRepository
     public MemberRepository(AppDbContext context)
     {
         _context = context;
+    }
+
+    public async Task<List<Member>> GetAllAsync()
+    {
+        return await _context.Members
+            .AsNoTracking()
+            .OrderBy(member => member.Name)
+            .ToListAsync();
     }
 
     public async Task<Member?> GetByIdAsync(Guid id)
@@ -34,5 +43,14 @@ public class MemberRepository : IMemberRepository
     public async Task AddAsync(Member member)
     {
         await _context.Members.AddAsync(member);
+    }
+
+    public async Task<bool> ExistsOtherActiveDirectorAsync(Guid memberId)
+    {
+        return await _context.Members.AnyAsync(member => 
+            member.Id != memberId && 
+            member.Role == Role.Diretoria &&
+            member.AccountStatus == StatusConta.Ativa
+        );
     }
 }

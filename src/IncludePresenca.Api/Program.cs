@@ -74,6 +74,11 @@ builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<ResendActivationInviteUseCase>();
 builder.Services.AddScoped<RequestPasswordResetUseCase>();
 builder.Services.AddScoped<ResetPasswordUseCase>();
+builder.Services.AddScoped<GetMembersUseCase>();
+builder.Services.AddScoped<GetMemberByIdUseCase>();
+builder.Services.AddScoped<UpdateMemberUseCase>();
+builder.Services.AddScoped<DeactivateMemberUseCase>();
+builder.Services.AddScoped<ReactivateMemberUseCase>();
 
 builder.Services.AddScoped<AdminSeeder>();
 
