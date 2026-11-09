@@ -65,4 +65,15 @@ public class Member
             ? StatusConta.PendenteAtivacao
             : StatusConta.Ativa;
     }
+
+    public void ResetPassword(string passwordHash)
+    {
+        if (AccountStatus != StatusConta.Ativa)
+            throw new InvalidOperationException("Account is not active.");
+
+        if (string.IsNullOrWhiteSpace(passwordHash))
+            throw new ArgumentException("Password hash is required.", nameof(passwordHash));
+
+        PasswordHash = passwordHash;
+    }
 }

@@ -1,6 +1,4 @@
+
 namespace IncludePresenca.Application.DTOs.Identity;
 
-public record CreateMemberResponse(
-    Guid Id,
-    string ActivationToken
-);
+public record CreateMemberResponse(Guid Id);

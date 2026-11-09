@@ -1,4 +1,3 @@
-
 using System.Text;
 using IncludePresenca.Api.ExceptionHandlers;
 using IncludePresenca.Application.Interfaces;
@@ -13,6 +12,10 @@ using IncludePresenca.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using IncludePresenca.Application.Interfaces.Email;
+using IncludePresenca.Infrastructure.Email;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,12 +66,38 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IPasswordHasher, Argon2PasswordHasher>();
 builder.Services.AddScoped<IActivationTokenService, ActivationTokenService>();
+builder.Services.AddScoped<ITokenService, ActivationTokenService>();
 
 builder.Services.AddScoped<CreateMemberUseCase>();
 builder.Services.AddScoped<ActivateMemberUseCase>();
 builder.Services.AddScoped<LoginUseCase>();
+builder.Services.AddScoped<ResendActivationInviteUseCase>();
+builder.Services.AddScoped<RequestPasswordResetUseCase>();
+builder.Services.AddScoped<ResetPasswordUseCase>();
 
 builder.Services.AddScoped<AdminSeeder>();
+
+builder.Services.AddScoped<IActivationEmailSender, SmtpActivationEmailSender>();
+builder.Services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>(); 
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("password-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }
+        )
+    );
+});
 
 var app = builder.Build();
 
@@ -84,6 +113,7 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

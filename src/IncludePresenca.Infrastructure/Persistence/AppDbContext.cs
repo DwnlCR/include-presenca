@@ -1,3 +1,4 @@
+
 using IncludePresenca.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ActivationToken> ActivationTokens => Set<ActivationToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
