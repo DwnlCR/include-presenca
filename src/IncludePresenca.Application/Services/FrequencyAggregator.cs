@@ -6,10 +6,6 @@ public class FrequencyAggregator
 {
     private readonly FrequencyCalculator _calculator = new FrequencyCalculator();
 
-    /// <summary>
-    /// Calculates the global percentage from totals, without averaging member percentages.
-    /// Throws OverflowException if a total exceeds Int64.MaxValue.
-    /// </summary>
     public decimal? Calculate(IEnumerable<MemberFrequencyCounts> members)
     {
         ArgumentNullException.ThrowIfNull(members);
