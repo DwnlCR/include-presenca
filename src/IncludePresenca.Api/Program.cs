@@ -16,6 +16,10 @@ using IncludePresenca.Application.Interfaces.Email;
 using IncludePresenca.Infrastructure.Email;
 using System.Threading.RateLimiting;
 using IncludePresenca.Application.UseCases.Events;
+using IncludePresenca.Application.UseCases.Attendance;
+using IncludePresenca.Application.Services;
+using IncludePresenca.Application.Interfaces.Queries;
+using IncludePresenca.Infrastructure.Persistence.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -84,6 +88,18 @@ builder.Services.AddScoped<GetEventsUseCase>();
 builder.Services.AddScoped<GetEventByIdUseCase>();
 builder.Services.AddScoped<UpdateEventUseCase>();
 builder.Services.AddScoped<CancelEventUseCase>();
+builder.Services.AddScoped<GenerateEventCheckInCodeUseCase>();
+builder.Services.AddScoped<GetEventAttendancesUseCase>();
+builder.Services.AddScoped<CheckInEventUseCase>();
+builder.Services.AddScoped<UpdateEventAttendanceUseCase>();
+builder.Services.AddScoped<CheckInCodeGenerator>();
+builder.Services.AddScoped<CheckInCodeValidator>();
+builder.Services.AddScoped<FrequencyCalculator>();
+builder.Services.AddScoped<FrequencyQueries>();
+builder.Services.AddScoped<IFrequencyQueries>(sp => sp.GetRequiredService<FrequencyQueries>());
+builder.Services.AddScoped<FrequencyAggregator>();
+builder.Services.AddScoped<IFrequencyReportQueries, FrequencyReportQueries>();
+builder.Services.AddScoped<FrequencyReportCsvExporter>();
 
 builder.Services.AddScoped<AdminSeeder>();
 
@@ -92,6 +108,7 @@ builder.Services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSend
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>(); 
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IEventParticipationRepository, EventParticipationRepository>();
+builder.Services.AddScoped<IEventCheckInCodeRepository, EventCheckInCodeRepository>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -103,6 +120,19 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }
+        )
+    );
+
+    options.AddPolicy("check-in", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true

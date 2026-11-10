@@ -8,7 +8,7 @@ public interface IFrequencyQueries
     /// The caller must supply the authenticated member ID from a trusted identity context.
     /// Returns null if the member does not exist; an existing member can have a null percentage.
     /// </summary>
-    Task<MemberFrequencySummaryResponse?> GetMemberFrequencyAsync(
+    Task<MemberFrequencyResponse?> GetMemberFrequencyAsync(
         Guid memberId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -16,5 +16,7 @@ public interface IFrequencyQueries
     /// Member existence and access authorization are the caller's responsibility.
     /// </summary>
     Task<IReadOnlyList<ParticipationHistoryItemResponse>> GetMemberHistoryAsync(
-        Guid memberId, CancellationToken cancellationToken = default);
+        Guid memberId,
+        int? days = null,
+        CancellationToken cancellationToken = default);
 }

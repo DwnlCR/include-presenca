@@ -174,7 +174,61 @@ O evento e suas participações permanecem armazenados após o cancelamento.
 
 Eventos cancelados não podem ser editados ou cancelados novamente.
 
-A inscrição automática não representa confirmação de presença. O check-in e a apuração da frequência serão integrados em módulos específicos.
+A inscrição automática não representa confirmação de presença. A confirmação ocorre pelo módulo de Check-in, e a apuração é realizada pelos módulos de Frequência e Relatórios.
+
+### Check-in e controle de presenças
+
+O sistema permite gerar um código temporário para confirmação de presença em um evento.
+
+Regras implementadas:
+
+- O código possui exatamente 6 dígitos numéricos.
+- O código é gerado com fonte criptograficamente segura.
+- Apenas o hash SHA-256 do código é armazenado no banco.
+- O código expira 15 minutos após sua geração.
+- Uma nova geração renova e substitui o código anterior do evento.
+- Não é possível gerar código ou registrar presença em evento cancelado.
+- A geração do código e a atualização manual das presenças exigem perfil `Diretoria`.
+- O check-in exige autenticação e participação elegível do membro no evento.
+- O código precisa existir, estar dentro da validade e corresponder ao valor informado.
+- Uma participação já finalizada não pode receber outro check-in.
+- O endpoint de check-in aceita no máximo 10 tentativas por minuto por endereço IP.
+- O check-in é marcado como atrasado quando ocorre mais de 10 minutos após o início do evento.
+
+As presenças podem ser consultadas pela Diretoria, e a Diretoria também pode classificá-las manualmente como presença, falta justificada ou falta não justificada.
+
+### Frequência
+
+A frequência individual é calculada pela fórmula:
+
+```text
+presenças / (presenças + faltas não justificadas) × 100
+```
+
+Faltas justificadas não entram no denominador. O percentual é `null` quando não existem presenças nem faltas não justificadas válidas para o cálculo.
+
+O histórico de participações:
+
+- pode ser consultado pelo próprio usuário autenticado;
+- pode receber o filtro opcional `dias`, que deve ser maior que zero;
+- exclui eventos cancelados;
+- exclui eventos que ainda não terminaram;
+- exclui participações ainda pendentes;
+- informa presença, falta justificada, falta não justificada e atraso.
+
+### Relatórios de frequência e presença
+
+A Diretoria pode consultar:
+
+- relatório global de frequência;
+- relatório de frequência por membro;
+- presenças, faltas justificadas, faltas não justificadas e atrasos;
+- quantidade de membros ativos;
+- membros abaixo da meta atualmente implementada de 75%.
+
+O percentual de 75% é uma regra atualmente implementada para o indicador `abaixoDaMeta` e ainda depende de confirmação da equipe como meta oficial do produto.
+
+O relatório por membro também pode ser exportado em CSV UTF-8. O exportador escapa aspas e vírgulas, preserva valores nulos e prefixa valores que poderiam ser interpretados como fórmulas por planilhas.
 
 ### Recuperação de senha
 
@@ -249,6 +303,30 @@ As rotas de gerenciamento de membros exigem autenticação JWT com o perfil `Dir
 | POST | `/api/events` | Criação de evento e inscrição automática dos membros ativos | Diretoria |
 | PUT | `/api/events/{id}` | Atualização de evento | Diretoria |
 | PATCH | `/api/events/{id}/cancel` | Cancelamento lógico de evento | Diretoria |
+
+### Check-in e presenças
+
+| Método | Endpoint | Descrição | Acesso |
+|---|---|---|---|
+| GET | `/api/eventos/{eventoId}/presencas` | Consulta das presenças do evento | Diretoria |
+| POST | `/api/eventos/{eventoId}/codigos-checkin` | Geração ou renovação do código de check-in | Diretoria |
+| POST | `/api/eventos/{eventoId}/checkin` | Registro de check-in do membro autenticado | Membro autenticado |
+| PATCH | `/api/eventos/{eventoId}/presencas/{membroId}` | Atualização manual da situação da participação | Diretoria |
+
+### Frequência
+
+| Método | Endpoint | Descrição | Acesso |
+|---|---|---|---|
+| GET | `/api/me/frequencia` | Resumo da frequência do usuário autenticado | Usuário autenticado |
+| GET | `/api/me/presencas?dias={n}` | Histórico de participações, opcionalmente filtrado por dias | Usuário autenticado |
+
+### Relatórios
+
+| Método | Endpoint | Descrição | Acesso |
+|---|---|---|---|
+| GET | `/api/relatorios/frequencia-global` | Relatório global de frequência | Diretoria |
+| GET | `/api/relatorios/presencas` | Relatório de presenças e frequência por membro | Diretoria |
+| GET | `/api/relatorios/presencas.csv` | Exportação do relatório por membro em CSV | Diretoria |
 
 ## Configuração do ambiente
 
@@ -365,6 +443,35 @@ No ambiente de desenvolvimento configurado, a API estará disponível em:
 http://localhost:5045
 ```
 
+### 7. Testar Check-in, Frequência e Relatórios
+
+Os testes manuais devem usar a base de desenvolvimento `include_presenca` somente quando a intenção for validar o ambiente local. Para os testes automatizados de integração, utilize uma base PostgreSQL separada, configurada pela variável de ambiente `INCLUDE_PRESENCA_TEST_CONNECTION`. Não use a base de testes para o acesso manual ao site e não exponha a string de conexão, senhas ou outros segredos.
+
+Para iniciar a API:
+
+```bash
+dotnet run --project src/IncludePresenca.Api --launch-profile http
+```
+
+A API ficará disponível em `http://localhost:5045`. Com um JWT válido, o arquivo [src/IncludePresenca.Api/IncludePresenca.Api.http](src/IncludePresenca.Api/IncludePresenca.Api.http) contém exemplos para consultar presenças, gerar o código de check-in, registrar presença e atualizar manualmente uma participação.
+
+Fluxo manual recomendado:
+
+1. Autentique uma conta com perfil `Diretoria`.
+2. Crie ou selecione um evento não cancelado com participações elegíveis.
+3. Gere o código em `/api/eventos/{eventoId}/codigos-checkin`.
+4. Use uma conta membro autenticada para chamar `/api/eventos/{eventoId}/checkin` com o código recebido.
+5. Consulte `/api/me/frequencia` e `/api/me/presencas` com o membro.
+6. Consulte `/api/relatorios/frequencia-global`, `/api/relatorios/presencas` ou baixe `/api/relatorios/presencas.csv` com a Diretoria.
+
+Para executar os testes automatizados:
+
+```bash
+dotnet test IncludePresenca.sln
+```
+
+Os testes de integração PostgreSQL só devem ser executados quando `INCLUDE_PRESENCA_TEST_CONNECTION` apontar para uma base de testes separada da base de desenvolvimento. A suíte não deve receber credenciais diretamente no README, no código ou no histórico do Git.
+
 ## Administrador inicial
 
 O projeto possui um mecanismo de inicialização automática de um usuário com perfil `Diretoria`.
@@ -396,8 +503,13 @@ Tabelas implementadas:
 - `PasswordResetTokens`
 - `Eventos`
 - `ParticipacoesEventos`
+- `CodigosCheckin`
+
+As participações de eventos também armazenam o status (`Pending`, `Present`, `JustifiedAbsence` ou `UnjustifiedAbsence`), o instante do check-in em UTC, a justificativa e o instante da justificativa. A tabela `CodigosCheckin` mantém um único código por evento, armazenado como hash, com os instantes UTC de criação e expiração.
 
 O projeto também utiliza uma abstração de unidade de trabalho (`IUnitOfWork`) para operações de persistência e execução transacional.
+
+As migrations `AddEventParticipationAttendanceFields` e `AddEventCheckInCodes` adicionam os dados de presença e a estrutura dos códigos de check-in.
 
 A migration `AddEventsAndParticipations` adiciona as tabelas de eventos e participações, com chaves estrangeiras para os membros e restrição de unicidade por evento e participante.
 
@@ -430,6 +542,13 @@ Durante o desenvolvimento dos módulos de identidade, gerenciamento de membros e
 | Preservação das três participações após cancelamento | Validado |
 | Consulta de eventos por Membro | Validado (`200 OK`) |
 | Bloqueio de cancelamento por Membro | Validado (`403 Forbidden`) |
+| Geração e renovação de código de check-in | Validado |
+| Expiração e validação do código de check-in | Validado |
+| Registro de presença por membro autenticado | Validado |
+| Consulta e atualização manual de presenças pela Diretoria | Validado |
+| Cálculo de frequência individual e histórico de participações | Validado |
+| Relatórios global e por membro | Validado |
+| Exportação do relatório de presenças em CSV | Validado |
 
 As verificações foram realizadas localmente por meio de requisições HTTP, consultas ao PostgreSQL e inspeção dos registros da aplicação.
 
@@ -474,11 +593,11 @@ Essas verificações não substituem uma suíte de testes automatizados.
 
 ### Próximas etapas
 
-- [ ] Registro de presença e ausência
+- [x] Registro de presença e ausência
 - [ ] Controle de justificativas
-- [ ] Cálculo de frequência
-- [ ] Relatórios de participação
-- [ ] Integração entre os módulos
+- [x] Cálculo de frequência
+- [x] Relatórios de participação
+- [x] Integração entre os módulos de Check-in, Frequência e Relatórios
 - [ ] Integração com o frontend
 - [ ] Ampliação da cobertura de testes
 
@@ -488,9 +607,9 @@ Essas verificações não substituem uma suíte de testes automatizados.
 
 Os módulos de identidade, autenticação, gerenciamento de membros e gerenciamento de eventos estão implementados, com seus principais fluxos validados localmente.
 
-A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria.
+A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria. Os módulos de Check-in, Frequência e Relatórios estão implementados no backend e possuem testes automatizados e validações locais.
 
-As próximas etapas incluem a integração do módulo de check-in, controle de ausências, justificativas, cálculo de frequência e relatórios de participação.
+A integração completa com o frontend ainda não deve ser considerada concluída. O controle de justificativas e a ampliação da cobertura de testes permanecem como próximas etapas.
 
 ---
 

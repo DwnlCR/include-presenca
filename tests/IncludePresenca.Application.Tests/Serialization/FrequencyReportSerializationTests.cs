@@ -72,28 +72,34 @@ public class FrequencyReportSerializationTests
         Assert.Equal(1, counts.GetProperty("justifiedAbsences").GetInt32());
     }
 
-    [Theory]
-    [InlineData(ParticipationStatus.Present, 1)]
-    [InlineData(ParticipationStatus.JustifiedAbsence, 2)]
-    [InlineData(ParticipationStatus.UnjustifiedAbsence, 3)]
-    public void History_SerializesStatusAsNumberAndDateTimeOffsetAsIso8601(
-        ParticipationStatus status, int expectedStatus)
+    [Fact]
+    public void History_SerializesFrontendContractWithTextualStatusAndNullableFields()
     {
         var date = new DateTimeOffset(2026, 11, 9, 14, 30, 15, TimeSpan.FromHours(-3)).AddTicks(1234567);
-        var item = new ParticipationHistoryItemResponse(EventId, "Reunião", date, status, true);
+        var registeredAt = date.AddMinutes(12);
+        var item = new ParticipationHistoryItemResponse(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            EventId,
+            "Reunião",
+            date,
+            date.AddHours(1),
+            registeredAt,
+            ParticipationStatus.Late,
+            "Atividade externa");
         using var json = Serialize(item);
         JsonElement root = json.RootElement;
 
-        AssertProperties(root, "eventId", "eventName", "eventDate", "status", "isLate");
-        Assert.Equal(EventId, root.GetProperty("eventId").GetGuid());
-        Assert.Equal("Reunião", root.GetProperty("eventName").GetString());
-        Assert.Equal("2026-11-09T14:30:15.1234567-03:00", root.GetProperty("eventDate").GetString());
-        DateTimeOffset restoredDate = root.GetProperty("eventDate").GetDateTimeOffset();
+        AssertProperties(root, "id", "eventoId", "titulo", "inicioEm", "terminoEm",
+            "registradoEm", "status", "observacao");
+        Assert.Equal(item.Id, root.GetProperty("id").GetGuid());
+        Assert.Equal(EventId, root.GetProperty("eventoId").GetGuid());
+        Assert.Equal("Reunião", root.GetProperty("titulo").GetString());
+        Assert.Equal("2026-11-09T14:30:15.1234567-03:00", root.GetProperty("inicioEm").GetString());
+        DateTimeOffset restoredDate = root.GetProperty("inicioEm").GetDateTimeOffset();
         Assert.Equal(date.Ticks, restoredDate.Ticks);
         Assert.Equal(date.Offset, restoredDate.Offset);
-        Assert.Equal(JsonValueKind.Number, root.GetProperty("status").ValueKind);
-        Assert.Equal(expectedStatus, root.GetProperty("status").GetInt32());
-        Assert.True(root.GetProperty("isLate").GetBoolean());
+        Assert.Equal(ParticipationStatus.Late, root.GetProperty("status").GetString());
+        Assert.Equal("Atividade externa", root.GetProperty("observacao").GetString());
         Assert.Equal(item, JsonSerializer.Deserialize<ParticipationHistoryItemResponse>(
             root.GetRawText(), _options));
     }
@@ -109,7 +115,8 @@ public class FrequencyReportSerializationTests
         JsonElement root = json.RootElement;
 
         AssertProperties(root, "totalPresences", "totalJustifiedAbsences",
-            "totalUnjustifiedAbsences", "globalFrequencyPercentage");
+            "totalUnjustifiedAbsences", "globalFrequencyPercentage", "frequenciaGlobal",
+            "membrosAtivos", "abaixoDaMeta", "membros");
         Assert.Equal(long.MaxValue, root.GetProperty("totalPresences").GetInt64());
         Assert.Equal(4_294_967_294L, root.GetProperty("totalJustifiedAbsences").GetInt64());
         Assert.Equal(0L, root.GetProperty("totalUnjustifiedAbsences").GetInt64());
@@ -117,8 +124,21 @@ public class FrequencyReportSerializationTests
         Assert.Equal(hasValue ? JsonValueKind.Number : JsonValueKind.Null, value.ValueKind);
         if (hasValue)
             Assert.Equal(percentage.GetValueOrDefault(), value.GetDecimal());
-        Assert.Equal(report, JsonSerializer.Deserialize<GeneralFrequencyReportResponse>(
-            root.GetRawText(), _options));
+        Assert.Equal(hasValue ? JsonValueKind.Number : JsonValueKind.Null,
+            root.GetProperty("frequenciaGlobal").ValueKind);
+        Assert.Equal(0, root.GetProperty("membrosAtivos").GetInt32());
+        Assert.Equal(0, root.GetProperty("abaixoDaMeta").GetInt32());
+        Assert.Equal(JsonValueKind.Array, root.GetProperty("membros").ValueKind);
+        GeneralFrequencyReportResponse restored = JsonSerializer.Deserialize<GeneralFrequencyReportResponse>(
+            root.GetRawText(), _options)!;
+        Assert.Equal(report.TotalPresences, restored.TotalPresences);
+        Assert.Equal(report.TotalJustifiedAbsences, restored.TotalJustifiedAbsences);
+        Assert.Equal(report.TotalUnjustifiedAbsences, restored.TotalUnjustifiedAbsences);
+        Assert.Equal(report.GlobalFrequencyPercentage, restored.GlobalFrequencyPercentage);
+        Assert.Equal(report.FrequenciaGlobal, restored.FrequenciaGlobal);
+        Assert.Equal(report.MembrosAtivos, restored.MembrosAtivos);
+        Assert.Equal(report.AbaixoDaMeta, restored.AbaixoDaMeta);
+        Assert.Empty(restored.Membros);
     }
 
     [Fact]
@@ -143,8 +163,8 @@ public class FrequencyReportSerializationTests
         var summary = Summary(700m / 9m);
         ParticipationHistoryItemResponse[] history =
         [
-            new(EventId, "Reunião", DateTimeOffset.Parse("2026-11-09T12:00:00+00:00"), ParticipationStatus.Present, false),
-            new(Guid.Empty, "Treinamento", DateTimeOffset.Parse("2026-11-10T12:00:00+00:00"), ParticipationStatus.JustifiedAbsence, false)
+            new(Guid.Parse("22222222-2222-2222-2222-222222222222"), EventId, "Reunião", DateTimeOffset.Parse("2026-11-09T12:00:00+00:00"), DateTimeOffset.Parse("2026-11-09T13:00:00+00:00"), DateTimeOffset.Parse("2026-11-09T12:00:00+00:00"), ParticipationStatus.Present, null),
+            new(Guid.Parse("33333333-3333-3333-3333-333333333333"), Guid.Empty, "Treinamento", DateTimeOffset.Parse("2026-11-10T12:00:00+00:00"), DateTimeOffset.Parse("2026-11-10T13:00:00+00:00"), null, ParticipationStatus.JustifiedAbsence, "Consulta")
         ];
         using var members = Serialize(new MemberFrequencyReportResponse([summary]));
         JsonElement member = Assert.Single(members.RootElement.GetProperty("members").EnumerateArray());
@@ -155,8 +175,8 @@ public class FrequencyReportSerializationTests
         Assert.Equal(MemberId, detail.RootElement.GetProperty("summary").GetProperty("memberId").GetGuid());
         JsonElement items = detail.RootElement.GetProperty("history");
         Assert.Equal(2, items.GetArrayLength());
-        Assert.False(items[0].GetProperty("isLate").GetBoolean());
-        Assert.Equal(2, items[1].GetProperty("status").GetInt32());
+        Assert.Equal(ParticipationStatus.Present, items[0].GetProperty("status").GetString());
+        Assert.Equal(ParticipationStatus.JustifiedAbsence, items[1].GetProperty("status").GetString());
         var restored = JsonSerializer.Deserialize<MemberFrequencyDetailResponse>(
             detail.RootElement.GetRawText(), _options);
         Assert.Equal(summary, restored!.Summary);

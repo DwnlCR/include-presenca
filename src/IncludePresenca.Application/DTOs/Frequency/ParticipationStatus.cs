@@ -1,11 +1,10 @@
 namespace IncludePresenca.Application.DTOs.Frequency;
 
-/// <summary>
-/// Classification for frequency responses, not an event lifecycle status.
-/// </summary>
-public enum ParticipationStatus
+/// <summary>Textual status values exposed by frequency DTOs.</summary>
+public static class ParticipationStatus
 {
-    Present = 1,
-    JustifiedAbsence = 2,
-    UnjustifiedAbsence = 3
+    public const string Present = "PRESENTE";
+    public const string Late = "ATRASO";
+    public const string JustifiedAbsence = "FALTA_JUSTIFICADA";
+    public const string UnjustifiedAbsence = "FALTA_NAO_JUSTIFICADA";
 }

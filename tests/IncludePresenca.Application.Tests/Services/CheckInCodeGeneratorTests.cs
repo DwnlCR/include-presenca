@@ -18,4 +18,15 @@ public class CheckInCodeGeneratorTests
             Assert.All(code, digit => Assert.InRange(digit, '0', '9'));
         }
     }
+
+    [Fact]
+    public void HashAndMatches_ValidateTheOriginalCodeWithoutExposingIt()
+    {
+        string code = "123456";
+        string hash = _generator.Hash(code);
+
+        Assert.NotEqual(code, hash);
+        Assert.True(_generator.Matches(code, hash));
+        Assert.False(_generator.Matches("654321", hash));
+    }
 }

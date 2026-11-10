@@ -4,3 +4,36 @@ GET {{IncludePresenca.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+@token = COLE_UM_JWT_AQUI
+@eventoId = 00000000-0000-0000-0000-000000000000
+@membroId = 00000000-0000-0000-0000-000000000000
+
+### Listar presenças do evento (Diretoria)
+GET {{IncludePresenca.Api_HostAddress}}/api/eventos/{{eventoId}}/presencas
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Gerar ou renovar código secreto (Diretoria)
+POST {{IncludePresenca.Api_HostAddress}}/api/eventos/{{eventoId}}/codigos-checkin
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Registrar check-in (membro autenticado)
+POST {{IncludePresenca.Api_HostAddress}}/api/eventos/{{eventoId}}/checkin
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "codigo": "123456"
+}
+
+### Confirmar presença manualmente (Diretoria)
+PATCH {{IncludePresenca.Api_HostAddress}}/api/eventos/{{eventoId}}/presencas/{{membroId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "Present",
+  "justification": null
+}
