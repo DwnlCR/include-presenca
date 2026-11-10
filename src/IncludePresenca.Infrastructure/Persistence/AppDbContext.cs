@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<Member> Members => Set<Member>();
     public DbSet<ActivationToken> ActivationTokens => Set<ActivationToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<EventParticipation> EventParticipations => Set<EventParticipation>();
+
+    public DbSet<Event> Events => Set<Event>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

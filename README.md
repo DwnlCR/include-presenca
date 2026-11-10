@@ -1,3 +1,4 @@
+
 # IncludePresença
 
 API REST desenvolvida em **C# com ASP.NET Core** para gerenciamento de membros e controle de presença em eventos da **Include Jr**.
@@ -63,6 +64,8 @@ Entidades implementadas:
 - `Member`
 - `ActivationToken`
 - `PasswordResetToken`
+- `Event`
+- `EventParticipation`
 
 ### Application
 
@@ -115,7 +118,7 @@ O token JWT possui validade de **1 hora**.
 | Perfil | Descrição |
 |---|---|
 | `Membro` | Integrante cadastrado no sistema |
-| `Diretoria` | Usuário com permissão para gerenciar membros |
+| `Diretoria` | Usuário com permissão para gerenciar membros e eventos |
 
 #### Status das contas
 
@@ -124,6 +127,54 @@ O token JWT possui validade de **1 hora**.
 | `PendenteAtivacao` | Conta aguardando ativação |
 | `Ativa` | Conta habilitada para autenticação |
 | `Desativada` | Conta desativada |
+
+### Administração de membros
+
+Além do cadastro e do reenvio de convites, a Diretoria pode:
+
+- Listar membros cadastrados.
+- Consultar um membro por ID.
+- Atualizar nome, e-mail e perfil.
+- Desativar contas.
+- Reativar contas.
+
+O sistema impede a desativação ou a remoção do perfil de Diretoria do último diretor ativo.
+
+A reativação de uma conta com senha cadastrada restaura seu status ativo. Contas sem senha permanecem pendentes de ativação.
+
+### Gerenciamento de eventos
+
+A Diretoria pode criar, editar e cancelar eventos. Membros autenticados podem listar eventos e consultar seus detalhes.
+
+Cada evento possui:
+
+- Título.
+- Descrição opcional.
+- Horário de início.
+- Horário de término.
+- Indicador de cancelamento.
+
+As datas devem ser informadas em UTC, e o horário de término deve ser posterior ao início.
+
+#### Inscrição automática
+
+Ao criar um evento, o sistema inscreve automaticamente todos os membros com conta ativa, incluindo a Diretoria.
+
+Contas pendentes de ativação ou desativadas não são elegíveis para a inscrição automática.
+
+A criação do evento e de suas participações ocorre em uma transação.
+
+A combinação de evento e membro possui restrição de unicidade para impedir inscrições duplicadas.
+
+#### Cancelamento de eventos
+
+O cancelamento é lógico, utilizando a propriedade `IsCancelled`.
+
+O evento e suas participações permanecem armazenados após o cancelamento.
+
+Eventos cancelados não podem ser editados ou cancelados novamente.
+
+A inscrição automática não representa confirmação de presença. O check-in e a apuração da frequência serão integrados em módulos específicos.
 
 ### Recuperação de senha
 
@@ -181,8 +232,23 @@ As respostas seguem um formato padronizado para facilitar a integração com o f
 |---|---|---|---|
 | POST | `/api/members` | Cadastro de membro | Diretoria |
 | POST | `/api/members/{id}/resend-activation` | Reenvio de convite de ativação | Diretoria |
+| GET | `/api/members` | Listagem de membros | Diretoria |
+| GET | `/api/members/{id}` | Consulta de membro por ID | Diretoria |
+| PUT | `/api/members/{id}` | Atualização de membro | Diretoria |
+| PATCH | `/api/members/{id}/deactivate` | Desativação de conta | Diretoria |
+| PATCH | `/api/members/{id}/reactivate` | Reativação de conta | Diretoria |
 
 As rotas de gerenciamento de membros exigem autenticação JWT com o perfil `Diretoria`.
+
+### Eventos
+
+| Método | Endpoint | Descrição | Acesso |
+|---|---|---|---|
+| GET | `/api/events` | Listagem de eventos | Autenticado |
+| GET | `/api/events/{id}` | Consulta de evento por ID | Autenticado |
+| POST | `/api/events` | Criação de evento e inscrição automática dos membros ativos | Diretoria |
+| PUT | `/api/events/{id}` | Atualização de evento | Diretoria |
+| PATCH | `/api/events/{id}/cancel` | Cancelamento lógico de evento | Diretoria |
 
 ## Configuração do ambiente
 
@@ -212,10 +278,10 @@ docker compose up -d
 
 O serviço utiliza:
 
-- PostgreSQL 16
-- Banco `include_presenca`
-- Porta local `5432`
-- Volume persistente para os dados
+- PostgreSQL 16.
+- Banco `include_presenca`.
+- Porta local `5432`.
+- Volume persistente para os dados.
 
 ### 3. Configurar os segredos da aplicação
 
@@ -328,12 +394,16 @@ Tabelas implementadas:
 - `Membros`
 - `ActivationTokens`
 - `PasswordResetTokens`
+- `Eventos`
+- `ParticipacoesEventos`
 
 O projeto também utiliza uma abstração de unidade de trabalho (`IUnitOfWork`) para operações de persistência e execução transacional.
 
+A migration `AddEventsAndParticipations` adiciona as tabelas de eventos e participações, com chaves estrangeiras para os membros e restrição de unicidade por evento e participante.
+
 ## Validações realizadas
 
-Durante o desenvolvimento do módulo de identidade e autenticação, foram realizadas verificações manuais dos principais fluxos.
+Durante o desenvolvimento dos módulos de identidade, gerenciamento de membros e eventos, foram realizadas verificações manuais dos principais fluxos.
 
 | Funcionalidade | Resultado |
 |---|---|
@@ -348,8 +418,20 @@ Durante o desenvolvimento do módulo de identidade e autenticação, foram reali
 | Reutilização de token consumido | Rejeitada |
 | Login com senha antiga após redefinição | Rejeitado |
 | Login com nova senha | Validado |
+| Listagem e consulta de membros | Validado |
+| Atualização, desativação e reativação de membros | Validado |
+| Proteção contra desativação ou rebaixamento do último diretor ativo | Validado |
+| Criação de evento | Validado (`201 Created`) |
+| Listagem e consulta de eventos | Validado |
+| Edição de evento | Validado (`200 OK`) |
+| Cancelamento lógico de evento | Validado (`204 No Content`) |
+| Bloqueio de edição de evento cancelado | Validado (`409 Conflict`) |
+| Inscrição automática de membros ativos, incluindo a Diretoria | Validado no cenário de três participantes |
+| Preservação das três participações após cancelamento | Validado |
+| Consulta de eventos por Membro | Validado (`200 OK`) |
+| Bloqueio de cancelamento por Membro | Validado (`403 Forbidden`) |
 
-As verificações foram realizadas localmente por meio de requisições HTTP e inspeção dos registros da aplicação.
+As verificações foram realizadas localmente por meio de requisições HTTP, consultas ao PostgreSQL e inspeção dos registros da aplicação.
 
 Essas verificações não substituem uma suíte de testes automatizados.
 
@@ -374,14 +456,29 @@ Essas verificações não substituem uma suíte de testes automatizados.
 - [x] Tratamento global de exceções
 - [x] Limitação de requisições na solicitação de recuperação
 
+### Gerenciamento de membros
+
+- [x] Cadastro de membros pela Diretoria
+- [x] Listagem e consulta de membros
+- [x] Atualização de membros
+- [x] Desativação e reativação de contas
+- [x] Proteção do último diretor ativo
+
+### Eventos
+
+- [x] Entidades e persistência de eventos e participações
+- [x] Criação, listagem e consulta de eventos
+- [x] Edição e cancelamento lógico de eventos
+- [x] Inscrição automática de membros ativos, incluindo a Diretoria
+- [x] Autorização por perfil nos endpoints de eventos
+
 ### Próximas etapas
 
-- [ ] Implementação do módulo de eventos
-- [ ] Inscrição automática de membros elegíveis em eventos
 - [ ] Registro de presença e ausência
 - [ ] Controle de justificativas
 - [ ] Cálculo de frequência
 - [ ] Relatórios de participação
+- [ ] Integração entre os módulos
 - [ ] Integração com o frontend
 - [ ] Ampliação da cobertura de testes
 
@@ -389,9 +486,11 @@ Essas verificações não substituem uma suíte de testes automatizados.
 
 **Em desenvolvimento — MVP**
 
-O módulo inicial de identidade e autenticação está implementado e teve seus principais fluxos verificados localmente.
+Os módulos de identidade, autenticação, gerenciamento de membros e gerenciamento de eventos estão implementados, com seus principais fluxos validados localmente.
 
-Os módulos de eventos, presença e relatórios fazem parte das próximas etapas do desenvolvimento.
+A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria.
+
+As próximas etapas incluem a integração do módulo de check-in, controle de ausências, justificativas, cálculo de frequência e relatórios de participação.
 
 ---
 

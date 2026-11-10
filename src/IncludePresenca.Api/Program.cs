@@ -15,7 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using IncludePresenca.Application.Interfaces.Email;
 using IncludePresenca.Infrastructure.Email;
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
+using IncludePresenca.Application.UseCases.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,12 +74,24 @@ builder.Services.AddScoped<LoginUseCase>();
 builder.Services.AddScoped<ResendActivationInviteUseCase>();
 builder.Services.AddScoped<RequestPasswordResetUseCase>();
 builder.Services.AddScoped<ResetPasswordUseCase>();
+builder.Services.AddScoped<GetMembersUseCase>();
+builder.Services.AddScoped<GetMemberByIdUseCase>();
+builder.Services.AddScoped<UpdateMemberUseCase>();
+builder.Services.AddScoped<DeactivateMemberUseCase>();
+builder.Services.AddScoped<ReactivateMemberUseCase>();
+builder.Services.AddScoped<CreateEventUseCase>();
+builder.Services.AddScoped<GetEventsUseCase>();
+builder.Services.AddScoped<GetEventByIdUseCase>();
+builder.Services.AddScoped<UpdateEventUseCase>();
+builder.Services.AddScoped<CancelEventUseCase>();
 
 builder.Services.AddScoped<AdminSeeder>();
 
 builder.Services.AddScoped<IActivationEmailSender, SmtpActivationEmailSender>();
 builder.Services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>(); 
+builder.Services.AddScoped<IEventRepository, EventRepository>();
+builder.Services.AddScoped<IEventParticipationRepository, EventParticipationRepository>();
 
 builder.Services.AddRateLimiter(options =>
 {

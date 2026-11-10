@@ -76,4 +76,20 @@ public class Member
 
         PasswordHash = passwordHash;
     }
+
+    public void Update(string name, string email, Role role)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Name is required.", nameof(name));
+
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email is required.", nameof(email));
+
+        if (!Enum.IsDefined(role))
+            throw new ArgumentException("Invalid access role.", nameof(role));
+
+        Name = name.Trim();
+        Email = email.Trim().ToLowerInvariant();
+        Role = role;
+    }
 }
