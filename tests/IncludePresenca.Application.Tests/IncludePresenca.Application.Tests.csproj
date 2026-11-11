@@ -23,6 +23,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\IncludePresenca.Application\IncludePresenca.Application.csproj" />
     <ProjectReference Include="..\..\src\IncludePresenca.Infrastructure\IncludePresenca.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\IncludePresenca.Api\IncludePresenca.Api.csproj" />
   </ItemGroup>
 
 </Project>
