@@ -64,6 +64,74 @@ public class EventParticipation
         Status = EventParticipationStatus.UnjustifiedAbsence;
     }
 
+    public void CorrectAttendance(
+        EventParticipationStatus newStatus,
+        string administrativeReason,
+        DateTime? checkedInAtUtc = null,
+        string? absenceJustification = null,
+        DateTime? justifiedAtUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(administrativeReason))
+            throw new ArgumentException("Administrative reason is required.", nameof(administrativeReason));
+
+        if (Status == EventParticipationStatus.Pending)
+            throw new InvalidOperationException("Only finalized participation can be corrected.");
+
+        if (!Enum.IsDefined(newStatus) || newStatus == EventParticipationStatus.Pending)
+            throw new ArgumentException(
+                "Only a final attendance status can be assigned.",
+                nameof(newStatus));
+
+        DateTime? correctedCheckedInAtUtc = null;
+        string? correctedJustification = null;
+        DateTime? correctedJustifiedAtUtc = null;
+
+        switch (newStatus)
+        {
+            case EventParticipationStatus.Present:
+                if (checkedInAtUtc is null)
+                    throw new ArgumentException(
+                        "A real UTC check-in time is required.",
+                        nameof(checkedInAtUtc));
+
+                EnsureUtc(checkedInAtUtc.Value, nameof(checkedInAtUtc));
+                correctedCheckedInAtUtc = checkedInAtUtc;
+                break;
+
+            case EventParticipationStatus.JustifiedAbsence:
+                if (string.IsNullOrWhiteSpace(absenceJustification))
+                    throw new ArgumentException(
+                        "Absence justification is required.",
+                        nameof(absenceJustification));
+
+                if (justifiedAtUtc is null)
+                    throw new ArgumentException(
+                        "A UTC justification time is required.",
+                        nameof(justifiedAtUtc));
+
+                EnsureUtc(justifiedAtUtc.Value, nameof(justifiedAtUtc));
+                correctedJustification = absenceJustification.Trim();
+                correctedJustifiedAtUtc = justifiedAtUtc;
+                break;
+
+            case EventParticipationStatus.UnjustifiedAbsence:
+                break;
+        }
+
+        if (Status == newStatus &&
+            CheckedInAtUtc == correctedCheckedInAtUtc &&
+            Justification == correctedJustification &&
+            JustifiedAtUtc == correctedJustifiedAtUtc)
+        {
+            throw new InvalidOperationException("Attendance correction does not change participation.");
+        }
+
+        Status = newStatus;
+        CheckedInAtUtc = correctedCheckedInAtUtc;
+        Justification = correctedJustification;
+        JustifiedAtUtc = correctedJustifiedAtUtc;
+    }
+
     private void EnsurePending()
     {
         if (Status != EventParticipationStatus.Pending)
