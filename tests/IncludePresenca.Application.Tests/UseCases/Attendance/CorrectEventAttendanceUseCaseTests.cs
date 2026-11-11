@@ -1,3 +1,4 @@
+using IncludePresenca.Application.Interfaces;
 using IncludePresenca.Application.Interfaces.Repositories;
 using IncludePresenca.Application.UseCases.Attendance;
 using IncludePresenca.Domain.Entities;
@@ -15,41 +16,94 @@ public sealed class CorrectEventAttendanceUseCaseTests
     private static readonly DateTime EventEndsAt = EventStartsAt.AddHours(2);
 
     [Fact]
-    public async Task ExecuteAsync_ValidCorrection_IsBlockedUntilAuditPersistenceExists()
+    public async Task ExecuteAsync_ValidCorrection_PersistsParticipationAndAuditAtomically()
     {
         Fixture fixture = CreateFixture(EventParticipationStatus.UnjustifiedAbsence);
+        DateTime checkedInAtUtc = EventStartsAt.AddMinutes(20);
 
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            fixture.UseCase.ExecuteAsync(
-                fixture.Event.Id,
-                MemberId,
-                DirectorId,
-                EventParticipationStatus.Present,
-                "Presença confirmada em lista assinada",
-                checkedInAtUtc: EventStartsAt.AddMinutes(20)));
+        await fixture.UseCase.ExecuteAsync(
+            fixture.Event.Id,
+            MemberId,
+            DirectorId,
+            EventParticipationStatus.Present,
+            "Administrative attendance correction",
+            checkedInAtUtc: checkedInAtUtc);
 
-        Assert.Equal(
-            "Administrative attendance correction cannot be persisted before audit support is available.",
-            exception.Message);
-        Assert.Equal(EventParticipationStatus.UnjustifiedAbsence, fixture.Participation.Status);
-        Assert.Null(fixture.Participation.CheckedInAtUtc);
+        Assert.Equal(EventParticipationStatus.Present, fixture.Participation.Status);
+        Assert.Equal(checkedInAtUtc, fixture.Participation.CheckedInAtUtc);
+        Assert.Single(fixture.AuditRepository.Audits);
+        EventParticipationAudit audit = fixture.AuditRepository.Audits[0];
+        Assert.Equal(fixture.Participation.Id, audit.ParticipationId);
+        Assert.Equal(EventParticipationStatus.UnjustifiedAbsence, audit.PreviousStatus);
+        Assert.Equal(EventParticipationStatus.Present, audit.NewStatus);
+        Assert.Null(audit.PreviousCheckedInAtUtc);
+        Assert.Equal(checkedInAtUtc, audit.NewCheckedInAtUtc);
+        Assert.Equal(DirectorId, audit.ChangedByMemberId);
+        Assert.Equal(DateTimeKind.Utc, audit.ChangedAtUtc.Kind);
         Assert.Equal(1, fixture.ParticipationRepository.LookupCount);
+        Assert.True(fixture.ParticipationRepository.LastForUpdate);
+        Assert.Equal(1, fixture.UnitOfWork.TransactionCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_EventDoesNotExist_RejectsCorrection()
+    public async Task ExecuteAsync_JustifiedAbsence_PersistsPreviousAndNewValuesInAudit()
     {
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
-        Guid missingEventId = Guid.NewGuid();
+        DateTime previousCheckIn = fixture.Participation.CheckedInAtUtc!.Value;
+        DateTime justifiedAtUtc = EventStartsAt.AddMinutes(30);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => fixture.UseCase.ExecuteAsync(
-            missingEventId,
+        await fixture.UseCase.ExecuteAsync(
+            fixture.Event.Id,
+            MemberId,
+            DirectorId,
+            EventParticipationStatus.JustifiedAbsence,
+            "Administrative correction",
+            absenceJustification: "Medical appointment",
+            justifiedAtUtc: justifiedAtUtc);
+
+        EventParticipationAudit audit = Assert.Single(fixture.AuditRepository.Audits);
+        Assert.Equal(EventParticipationStatus.Present, audit.PreviousStatus);
+        Assert.Equal(EventParticipationStatus.JustifiedAbsence, audit.NewStatus);
+        Assert.Equal(previousCheckIn, audit.PreviousCheckedInAtUtc);
+        Assert.Null(audit.NewCheckedInAtUtc);
+        Assert.Equal("Medical appointment", audit.NewJustification);
+        Assert.Equal(justifiedAtUtc, audit.NewJustifiedAtUtc);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnjustifiedAbsence_ClearsIncompatibleAttendanceData()
+    {
+        Fixture fixture = CreateFixture(EventParticipationStatus.JustifiedAbsence);
+
+        await fixture.UseCase.ExecuteAsync(
+            fixture.Event.Id,
             MemberId,
             DirectorId,
             EventParticipationStatus.UnjustifiedAbsence,
-            "Correção administrativa"));
+            "Administrative correction");
+
+        Assert.Equal(EventParticipationStatus.UnjustifiedAbsence, fixture.Participation.Status);
+        Assert.Null(fixture.Participation.CheckedInAtUtc);
+        Assert.Null(fixture.Participation.Justification);
+        Assert.Null(fixture.Participation.JustifiedAtUtc);
+        EventParticipationAudit audit = Assert.Single(fixture.AuditRepository.Audits);
+        Assert.Null(audit.NewCheckedInAtUtc);
+        Assert.Null(audit.NewJustification);
+        Assert.Null(audit.NewJustifiedAtUtc);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EventDoesNotExist_RejectsCorrectionWithoutStartingParticipationLookup()
+    {
+        Fixture fixture = CreateFixture(EventParticipationStatus.Present);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => fixture.UseCase.ExecuteAsync(
+            Guid.NewGuid(), MemberId, DirectorId,
+            EventParticipationStatus.UnjustifiedAbsence,
+            "Administrative correction"));
 
         Assert.Equal(0, fixture.ParticipationRepository.LookupCount);
+        Assert.Empty(fixture.AuditRepository.Audits);
     }
 
     [Fact]
@@ -59,13 +113,11 @@ public sealed class CorrectEventAttendanceUseCaseTests
         fixture.Event.Cancel();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.UnjustifiedAbsence,
-            "Correção administrativa"));
+            "Administrative correction"));
 
-        Assert.Equal(0, fixture.ParticipationRepository.LookupCount);
+        Assert.Empty(fixture.AuditRepository.Audits);
     }
 
     [Fact]
@@ -75,25 +127,25 @@ public sealed class CorrectEventAttendanceUseCaseTests
         fixture.ParticipationRepository.Participation = null;
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.UnjustifiedAbsence,
-            "Correção administrativa"));
+            "Administrative correction"));
+
+        Assert.Empty(fixture.AuditRepository.Audits);
     }
 
     [Fact]
-    public async Task ExecuteAsync_PresentOutsideEventPeriod_RejectsCorrection()
+    public async Task ExecuteAsync_PresentOutsideEventPeriod_RejectsCorrectionWithoutAudit()
     {
         Fixture fixture = CreateFixture(EventParticipationStatus.UnjustifiedAbsence);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.Present,
-            "Presença confirmada",
+            "Administrative correction",
             checkedInAtUtc: EventEndsAt));
+
+        Assert.Empty(fixture.AuditRepository.Audits);
     }
 
     [Fact]
@@ -102,11 +154,9 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.UnjustifiedAbsence);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.Present,
-            "Presença confirmada",
+            "Administrative correction",
             checkedInAtUtc: new DateTime(2026, 11, 11, 13, 0, 0, DateTimeKind.Local)));
     }
 
@@ -120,9 +170,7 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.UnjustifiedAbsence,
             administrativeReason!));
     }
@@ -137,11 +185,9 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.JustifiedAbsence,
-            "Atestado apresentado",
+            "Administrative correction",
             absenceJustification: absenceJustification,
             justifiedAtUtc: EventStartsAt.AddMinutes(30)));
     }
@@ -152,12 +198,10 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.JustifiedAbsence,
-            "Atestado apresentado",
-            absenceJustification: "Consulta médica"));
+            "Administrative correction",
+            absenceJustification: "Medical appointment"));
     }
 
     [Fact]
@@ -166,11 +210,9 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
 
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.Pending,
-            "Correção administrativa"));
+            "Administrative correction"));
     }
 
     [Fact]
@@ -179,11 +221,9 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Pending);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.Present,
-            "Presença confirmada",
+            "Administrative correction",
             checkedInAtUtc: EventStartsAt.AddMinutes(20)));
     }
 
@@ -193,26 +233,21 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            Guid.Empty,
+            fixture.Event.Id, MemberId, Guid.Empty,
             EventParticipationStatus.UnjustifiedAbsence,
-            "Correção administrativa"));
+            "Administrative correction"));
     }
 
     [Fact]
     public async Task ExecuteAsync_SameStatusWithoutEffectiveChange_RejectsCorrection()
     {
         Fixture fixture = CreateFixture(EventParticipationStatus.Present);
-        DateTime checkedInAtUtc = fixture.Participation.CheckedInAtUtc!.Value;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.UseCase.ExecuteAsync(
-            fixture.Event.Id,
-            MemberId,
-            DirectorId,
+            fixture.Event.Id, MemberId, DirectorId,
             EventParticipationStatus.Present,
-            "Motivo administrativo",
-            checkedInAtUtc: checkedInAtUtc));
+            "Administrative correction",
+            checkedInAtUtc: fixture.Participation.CheckedInAtUtc));
     }
 
     private static Fixture CreateFixture(EventParticipationStatus status)
@@ -222,11 +257,22 @@ public sealed class CorrectEventAttendanceUseCaseTests
         SetStatus(participation, status);
 
         FakeParticipationRepository participationRepository = new(participation);
+        FakeAuditRepository auditRepository = new();
+        FakeUnitOfWork unitOfWork = new();
         CorrectEventAttendanceUseCase useCase = new(
             new FakeEventRepository(eventEntity),
-            participationRepository);
+            participationRepository,
+            auditRepository,
+            unitOfWork,
+            new FixedTimeProvider(EventStartsAt.AddHours(1)));
 
-        return new Fixture(eventEntity, participation, participationRepository, useCase);
+        return new Fixture(
+            eventEntity,
+            participation,
+            participationRepository,
+            auditRepository,
+            unitOfWork,
+            useCase);
     }
 
     private static void SetStatus(
@@ -243,7 +289,7 @@ public sealed class CorrectEventAttendanceUseCaseTests
                 participation.RegisterPresence(utcNow);
                 break;
             case EventParticipationStatus.JustifiedAbsence:
-                participation.JustifyAbsence("Consulta médica", utcNow);
+                participation.JustifyAbsence("Medical appointment", utcNow);
                 break;
             case EventParticipationStatus.UnjustifiedAbsence:
                 participation.ConsolidateUnjustifiedAbsence();
@@ -255,6 +301,8 @@ public sealed class CorrectEventAttendanceUseCaseTests
         Event Event,
         EventParticipation Participation,
         FakeParticipationRepository ParticipationRepository,
+        FakeAuditRepository AuditRepository,
+        FakeUnitOfWork UnitOfWork,
         CorrectEventAttendanceUseCase UseCase);
 
     private sealed class FakeEventRepository(Event eventEntity) : IEventRepository
@@ -273,6 +321,7 @@ public sealed class CorrectEventAttendanceUseCaseTests
     {
         public EventParticipation? Participation { get; set; } = participation;
         public int LookupCount { get; private set; }
+        public bool LastForUpdate { get; private set; }
 
         public Task AddRangeAsync(List<EventParticipation> participations) =>
             Task.CompletedTask;
@@ -291,7 +340,42 @@ public sealed class CorrectEventAttendanceUseCaseTests
             CancellationToken cancellationToken = default)
         {
             LookupCount++;
+            LastForUpdate = forUpdate;
             return Task.FromResult(Participation);
         }
+    }
+
+    private sealed class FakeAuditRepository : IEventParticipationAuditRepository
+    {
+        public List<EventParticipationAudit> Audits { get; } = [];
+
+        public Task AddAsync(
+            EventParticipationAudit audit,
+            CancellationToken cancellationToken = default)
+        {
+            Audits.Add(audit);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeUnitOfWork : IUnitOfWork
+    {
+        public int TransactionCount { get; private set; }
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(1);
+
+        public async Task ExecuteInTransactionAsync(
+            Func<Task> operation,
+            CancellationToken cancellationToken = default)
+        {
+            TransactionCount++;
+            await operation();
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utcNow);
     }
 }

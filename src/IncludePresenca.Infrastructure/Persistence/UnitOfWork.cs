@@ -26,10 +26,24 @@ public class UnitOfWork : IUnitOfWork
         await using IDbContextTransaction transaction =
             await _context.Database.BeginTransactionAsync(cancellationToken);
 
-        await operation();
+        try
+        {
+            await operation();
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Preserve the original operation, save, or commit exception.
+            }
 
-        await _context.SaveChangesAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
+            throw;
+        }
     }
 }

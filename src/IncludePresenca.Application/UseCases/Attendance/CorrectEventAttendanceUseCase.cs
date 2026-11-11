@@ -1,4 +1,5 @@
 using IncludePresenca.Application.Interfaces.Repositories;
+using IncludePresenca.Application.Interfaces;
 using IncludePresenca.Domain.Entities;
 using IncludePresenca.Domain.Enums;
 
@@ -6,18 +7,24 @@ namespace IncludePresenca.Application.UseCases.Attendance;
 
 public sealed class CorrectEventAttendanceUseCase
 {
-    private const string AuditUnavailableMessage =
-        "Administrative attendance correction cannot be persisted before audit support is available.";
-
     private readonly IEventRepository _eventRepository;
     private readonly IEventParticipationRepository _participationRepository;
+    private readonly IEventParticipationAuditRepository _auditRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _timeProvider;
 
     public CorrectEventAttendanceUseCase(
         IEventRepository eventRepository,
-        IEventParticipationRepository participationRepository)
+        IEventParticipationRepository participationRepository,
+        IEventParticipationAuditRepository auditRepository,
+        IUnitOfWork unitOfWork,
+        TimeProvider? timeProvider = null)
     {
         _eventRepository = eventRepository;
         _participationRepository = participationRepository;
+        _auditRepository = auditRepository;
+        _unitOfWork = unitOfWork;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task ExecuteAsync(
@@ -31,31 +38,64 @@ public sealed class CorrectEventAttendanceUseCase
         DateTime? justifiedAtUtc = null,
         CancellationToken cancellationToken = default)
     {
-        Event eventEntity = await _eventRepository.GetByIdAsync(eventId)
-            ?? throw new KeyNotFoundException("Event not found.");
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            Event eventEntity = await _eventRepository.GetByIdAsync(eventId)
+                ?? throw new KeyNotFoundException("Event not found.");
 
-        if (eventEntity.IsCancelled)
-            throw new InvalidOperationException("Cannot correct attendance for a cancelled event.");
+            if (eventEntity.IsCancelled)
+                throw new InvalidOperationException("Cannot correct attendance for a cancelled event.");
 
-        EventParticipation participation = await _participationRepository
-            .GetByEventAndMemberIdAsync(
-                eventId,
-                memberId,
-                forUpdate: false,
-                cancellationToken)
-            ?? throw new KeyNotFoundException("Participation not found.");
+            EventParticipation participation = await _participationRepository
+                .GetByEventAndMemberIdAsync(
+                    eventId,
+                    memberId,
+                    forUpdate: true,
+                    cancellationToken)
+                ?? throw new KeyNotFoundException("Participation not found.");
 
-        ValidateCorrection(
-            eventEntity,
-            participation,
-            directorId,
-            newStatus,
-            administrativeReason,
-            checkedInAtUtc,
-            absenceJustification,
-            justifiedAtUtc);
+            ValidateCorrection(
+                eventEntity,
+                participation,
+                directorId,
+                newStatus,
+                administrativeReason,
+                checkedInAtUtc,
+                absenceJustification,
+                justifiedAtUtc);
 
-        throw new InvalidOperationException(AuditUnavailableMessage);
+            EventParticipationStatus previousStatus = participation.Status;
+            DateTime? previousCheckedInAtUtc = participation.CheckedInAtUtc;
+            string? previousJustification = participation.Justification;
+            DateTime? previousJustifiedAtUtc = participation.JustifiedAtUtc;
+            DateTime changedAtUtc = _timeProvider.GetUtcNow().UtcDateTime;
+
+            participation.CorrectAttendance(
+                newStatus,
+                administrativeReason,
+                checkedInAtUtc,
+                absenceJustification,
+                justifiedAtUtc);
+
+            EventParticipationAudit audit = new(
+                participation.Id,
+                participation.EventId,
+                participation.MemberId,
+                directorId,
+                changedAtUtc,
+                previousStatus,
+                participation.Status,
+                previousCheckedInAtUtc,
+                participation.CheckedInAtUtc,
+                previousJustification,
+                participation.Justification,
+                previousJustifiedAtUtc,
+                participation.JustifiedAtUtc,
+                administrativeReason);
+
+            await _auditRepository.AddAsync(audit, cancellationToken);
+        }, cancellationToken);
+
     }
 
     private static void ValidateCorrection(
