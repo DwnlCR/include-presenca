@@ -1,6 +1,8 @@
 
 using IncludePresenca.Application.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace IncludePresenca.Infrastructure.Persistence;
 
@@ -31,6 +33,19 @@ public class UnitOfWork : IUnitOfWork
             await operation();
             await _context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException postgresException &&
+            postgresException.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            catch
+            {
+            }
+
+            throw new InvalidOperationException("The operation conflicts with an existing record.", exception);
         }
         catch
         {

@@ -64,6 +64,20 @@ public class EventParticipation
         Status = EventParticipationStatus.UnjustifiedAbsence;
     }
 
+    public void ApplyApprovedJustification(string justification, DateTime justifiedAtUtc)
+    {
+        if (Status != EventParticipationStatus.UnjustifiedAbsence)
+            throw new InvalidOperationException("Only an unjustified absence can be approved as justified.");
+
+        if (string.IsNullOrWhiteSpace(justification))
+            throw new ArgumentException("Justification is required.", nameof(justification));
+
+        EnsureUtc(justifiedAtUtc, nameof(justifiedAtUtc));
+        Status = EventParticipationStatus.JustifiedAbsence;
+        Justification = justification.Trim();
+        JustifiedAtUtc = justifiedAtUtc;
+    }
+
     public void CorrectAttendance(
         EventParticipationStatus newStatus,
         string administrativeReason,

@@ -15,6 +15,8 @@ public class AppDbContext : DbContext
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<EventParticipation> EventParticipations => Set<EventParticipation>();
     public DbSet<EventParticipationAudit> EventParticipationAudits => Set<EventParticipationAudit>();
+    public DbSet<JustificationRequest> JustificationRequests => Set<JustificationRequest>();
+    public DbSet<JustificationAudit> JustificationAudits => Set<JustificationAudit>();
     public DbSet<EventCheckInCode> EventCheckInCodes => Set<EventCheckInCode>();
 
     public DbSet<Event> Events => Set<Event>();

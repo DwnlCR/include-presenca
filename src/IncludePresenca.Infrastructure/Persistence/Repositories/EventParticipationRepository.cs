@@ -55,4 +55,5 @@ public class EventParticipationRepository : IEventParticipationRepository
                 participation => participation.EventId == eventId && participation.MemberId == memberId,
                 cancellationToken);
     }
+
 }
