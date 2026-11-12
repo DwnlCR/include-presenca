@@ -20,11 +20,16 @@ using IncludePresenca.Application.UseCases.Attendance;
 using IncludePresenca.Application.Services;
 using IncludePresenca.Application.Interfaces.Queries;
 using IncludePresenca.Infrastructure.Persistence.Queries;
+using IncludePresenca.Application.UseCases.Justifications;
+using IncludePresenca.Application.Interfaces.Storage;
+using IncludePresenca.Infrastructure.Storage;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
@@ -103,6 +108,11 @@ builder.Services.AddScoped<IFrequencyQueries>(sp => sp.GetRequiredService<Freque
 builder.Services.AddScoped<FrequencyAggregator>();
 builder.Services.AddScoped<IFrequencyReportQueries, FrequencyReportQueries>();
 builder.Services.AddScoped<FrequencyReportCsvExporter>();
+builder.Services.AddScoped<GetPendingAbsencesUseCase>();
+builder.Services.AddScoped<GetMyJustificationsUseCase>();
+builder.Services.AddScoped<SubmitJustificationUseCase>();
+builder.Services.AddScoped<GetJustificationQueueUseCase>();
+builder.Services.AddScoped<DecideJustificationUseCase>();
 
 builder.Services.AddScoped<AdminSeeder>();
 
@@ -113,6 +123,12 @@ builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IEventParticipationRepository, EventParticipationRepository>();
 builder.Services.AddScoped<IEventParticipationAuditRepository, EventParticipationAuditRepository>();
 builder.Services.AddScoped<IEventCheckInCodeRepository, EventCheckInCodeRepository>();
+builder.Services.AddScoped<IJustificationRequestRepository, JustificationRequestRepository>();
+builder.Services.AddScoped<IJustificationParticipationRepository, JustificationParticipationRepository>();
+builder.Services.AddScoped<IJustificationAuditRepository, JustificationAuditRepository>();
+builder.Services.AddScoped<IJustificationQueries, JustificationQueries>();
+builder.Services.Configure<PrivateFileStorageOptions>(builder.Configuration.GetSection("JustificationStorage"));
+builder.Services.AddSingleton<IPrivateFileStorage, PrivateFileStorage>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -170,3 +186,5 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+public partial class Program;

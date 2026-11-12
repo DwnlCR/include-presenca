@@ -272,7 +272,12 @@ public sealed class AttendanceControllerTests
             DateTime.UtcNow.AddHours(-1),
             DateTime.UtcNow.AddHours(1));
         EventParticipation participation = new(eventEntity.Id, MemberId);
-        participation.RegisterPresence(DateTime.UtcNow.AddMinutes(-10));
+        DateTime checkedInAtUtc = DateTime.UtcNow.AddMinutes(-10);
+        long precision = TimeSpan.TicksPerMicrosecond;
+        checkedInAtUtc = new DateTime(
+            checkedInAtUtc.Ticks - checkedInAtUtc.Ticks % precision,
+            DateTimeKind.Utc);
+        participation.RegisterPresence(checkedInAtUtc);
 
         return new ControllerFixture(eventEntity, participation);
     }

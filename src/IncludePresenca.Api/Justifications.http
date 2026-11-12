@@ -1,0 +1,54 @@
+@baseUrl = http://localhost:5045
+@memberToken = replace-with-member-jwt
+@directorToken = replace-with-director-jwt
+@participationId = 00000000-0000-0000-0000-000000000000
+@justificationId = 00000000-0000-0000-0000-000000000000
+
+### List member absences available for justification
+GET {{baseUrl}}/api/me/faltas?semJustificativa=true
+Authorization: Bearer {{memberToken}}
+
+### List member justification history
+GET {{baseUrl}}/api/me/justificativas
+Authorization: Bearer {{memberToken}}
+
+### Submit a justification without an attachment
+POST {{baseUrl}}/api/me/justificativas
+Authorization: Bearer {{memberToken}}
+Content-Type: multipart/form-data; boundary=JustificationBoundary
+
+--JustificationBoundary
+Content-Disposition: form-data; name="faltaId"
+
+{{participationId}}
+--JustificationBoundary
+Content-Disposition: form-data; name="motivo"
+
+SAUDE
+--JustificationBoundary
+Content-Disposition: form-data; name="descricao"
+
+Consulta médica previamente agendada para o mesmo horário do evento, conforme comprovante disponível.
+--JustificationBoundary--
+
+### List the director queue
+GET {{baseUrl}}/api/justificativas
+Authorization: Bearer {{directorToken}}
+
+### Approve a pending justification
+PATCH {{baseUrl}}/api/justificativas/{{justificationId}}
+Authorization: Bearer {{directorToken}}
+Content-Type: application/json
+
+{
+  "status": "APROVADA"
+}
+
+### Reject a pending justification
+PATCH {{baseUrl}}/api/justificativas/{{justificationId}}
+Authorization: Bearer {{directorToken}}
+Content-Type: application/json
+
+{
+  "status": "REJEITADA"
+}

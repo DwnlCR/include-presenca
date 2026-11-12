@@ -141,7 +141,7 @@ public sealed class CheckInEventUseCaseTests
                 eventId == participation.EventId && memberId == participation.MemberId
                     ? participation
                     : null);
-        
+
         public Task<List<EventParticipation>> GetByEventIdsAsync(
             List<Guid> eventIds,
             CancellationToken cancellationToken = default)

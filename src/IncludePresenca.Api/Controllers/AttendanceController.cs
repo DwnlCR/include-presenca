@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using IncludePresenca.Application.DTOs.Attendance;
+using IncludePresenca.Application.Services;
 using IncludePresenca.Application.UseCases.Attendance;
 using IncludePresenca.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -173,25 +174,6 @@ public class AttendanceController : ControllerBase
         string? value,
         out EventParticipationStatus status)
     {
-        if (string.Equals(value, nameof(EventParticipationStatus.Present), StringComparison.OrdinalIgnoreCase))
-        {
-            status = EventParticipationStatus.Present;
-            return true;
-        }
-
-        if (string.Equals(value, nameof(EventParticipationStatus.JustifiedAbsence), StringComparison.OrdinalIgnoreCase))
-        {
-            status = EventParticipationStatus.JustifiedAbsence;
-            return true;
-        }
-
-        if (string.Equals(value, nameof(EventParticipationStatus.UnjustifiedAbsence), StringComparison.OrdinalIgnoreCase))
-        {
-            status = EventParticipationStatus.UnjustifiedAbsence;
-            return true;
-        }
-
-        status = default;
-        return false;
+        return AttendanceStatusParser.TryParseFinal(value, out status);
     }
 }
