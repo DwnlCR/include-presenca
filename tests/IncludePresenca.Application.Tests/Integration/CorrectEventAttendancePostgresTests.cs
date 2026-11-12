@@ -387,6 +387,11 @@ public sealed class CorrectEventAttendancePostgresTests
             CancellationToken cancellationToken = default) =>
             _inner.GetByEventIdAsync(eventId, cancellationToken);
 
+        public Task<List<EventParticipation>> GetByEventIdsAsync(
+            List<Guid> eventIds,
+            CancellationToken cancellationToken = default) =>
+            _inner.GetByEventIdsAsync(eventIds, cancellationToken);
+
         public async Task<EventParticipation?> GetByEventAndMemberIdAsync(
             Guid eventId,
             Guid memberId,
@@ -394,6 +399,7 @@ public sealed class CorrectEventAttendancePostgresTests
             CancellationToken cancellationToken = default)
         {
             LookupStarted.TrySetResult(true);
+
             try
             {
                 return await _inner.GetByEventAndMemberIdAsync(

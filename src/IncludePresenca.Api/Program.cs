@@ -98,6 +98,8 @@ builder.Services.AddScoped<GetEventAttendancesUseCase>();
 builder.Services.AddScoped<CheckInEventUseCase>();
 builder.Services.AddScoped<UpdateEventAttendanceUseCase>();
 builder.Services.AddScoped<CorrectEventAttendanceUseCase>();
+builder.Services.AddScoped<GetEventSummaryUseCase>();
+
 builder.Services.AddScoped<CheckInCodeGenerator>();
 builder.Services.AddScoped<CheckInCodeValidator>();
 builder.Services.AddScoped<FrequencyCalculator>();

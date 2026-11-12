@@ -348,7 +348,8 @@ public sealed class AttendanceControllerTests
     {
         public EventParticipation? Participation { get; set; } = participation;
 
-        public Task AddRangeAsync(List<EventParticipation> participations) => Task.CompletedTask;
+        public Task AddRangeAsync(List<EventParticipation> participations) =>
+            Task.CompletedTask;
 
         public Task<List<EventParticipation>> GetByEventIdAsync(
             Guid eventId,
@@ -356,6 +357,14 @@ public sealed class AttendanceControllerTests
             Task.FromResult(Participation is null
                 ? new List<EventParticipation>()
                 : new List<EventParticipation> { Participation });
+
+        public Task<List<EventParticipation>> GetByEventIdsAsync(
+            List<Guid> eventIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                Participation is not null && eventIds.Contains(Participation.EventId)
+                    ? new List<EventParticipation> { Participation }
+                    : new List<EventParticipation>());
 
         public Task<EventParticipation?> GetByEventAndMemberIdAsync(
             Guid eventId,

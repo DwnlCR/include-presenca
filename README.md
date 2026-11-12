@@ -1,4 +1,3 @@
-
 # IncludePresença
 
 API REST desenvolvida em **C# com ASP.NET Core** para gerenciamento de membros e controle de presença em eventos da **Include Jr**.
@@ -18,6 +17,7 @@ O backend está sendo desenvolvido de forma incremental, com separação de resp
 - **Argon2id** para hash de senhas
 - **MailKit** para envio de e-mails via SMTP
 - **OpenAPI**
+- **xUnit** para testes automatizados
 - **Git e GitHub**
 
 ## Arquitetura
@@ -51,6 +51,9 @@ include-presenca/
 │       │   └── Seed/
 │       └── Security/
 │
+├── tests/
+│   └── IncludePresenca.Application.Tests/
+│
 ├── docker-compose.yml
 └── IncludePresenca.sln
 ```
@@ -66,6 +69,7 @@ Entidades implementadas:
 - `PasswordResetToken`
 - `Event`
 - `EventParticipation`
+- `EventParticipationAudit`
 
 ### Application
 
@@ -176,6 +180,64 @@ Eventos cancelados não podem ser editados ou cancelados novamente.
 
 A inscrição automática não representa confirmação de presença. A confirmação ocorre pelo módulo de Check-in, e a apuração é realizada pelos módulos de Frequência e Relatórios.
 
+### Resumo de eventos
+
+O sistema disponibiliza um endpoint para consulta de indicadores gerais dos eventos, acessível exclusivamente pela Diretoria.
+
+O resumo apresenta:
+
+- **Próximo evento:** título e data de início do evento futuro mais próximo.
+- **Eventos no mês:** quantidade de eventos não cancelados no mês atual.
+- **Presença média:** percentual de presenças nas participações finalizadas dos eventos encerrados.
+
+#### Regras de cálculo
+
+O próximo evento considera apenas eventos não cancelados cuja data de início seja posterior ao instante atual.
+
+A quantidade de eventos no mês considera o mês e o ano atuais no fuso horário `America/Sao_Paulo`, desconsiderando eventos cancelados.
+
+A presença média considera somente participações de eventos não cancelados que já terminaram.
+
+Participações com status `Pending` são desconsideradas.
+
+A fórmula utilizada é:
+
+```text
+presença média = (participações presentes / participações finalizadas) × 100
+```
+
+O cálculo considera os seguintes status:
+
+| Status | Considerado no cálculo |
+|---|---|
+| `Pending` | Não |
+| `Present` | Sim, como presença |
+| `JustifiedAbsence` | Sim, no denominador |
+| `UnjustifiedAbsence` | Sim, no denominador |
+
+O percentual é arredondado para duas casas decimais.
+
+A presença média é calculada sobre o conjunto de participações finalizadas elegíveis, e não pela média aritmética dos percentuais individuais de cada evento.
+
+Quando não existem participações finalizadas elegíveis, o valor retornado é `null`.
+
+Quando não existe evento futuro elegível, o próximo evento também é `null`.
+
+#### Exemplo de resposta
+
+```json
+{
+  "proximoEvento": {
+    "titulo": "Reunião Geral Include Jr",
+    "inicioEm": "2026-11-20T14:00:00Z"
+  },
+  "eventosNoMes": 1,
+  "presencaMedia": null
+}
+```
+
+O resumo utiliza os dados persistidos no PostgreSQL, sem depender de valores simulados.
+
 ### Check-in e controle de presenças
 
 O Check-in vincula uma participação elegível ao membro autenticado pelo JWT. A Diretoria gera um código numérico de seis dígitos; somente o hash SHA-256 é persistido, o código expira em 15 minutos e uma nova geração substitui o anterior.
@@ -191,11 +253,37 @@ Regras implementadas:
 
 Os status de presença aceitos na correção administrativa são `PRESENTE`, `FALTA_JUSTIFICADA` e `FALTA_NAO_JUSTIFICADA` (também são aceitos os nomes internos em inglês). Algumas respostas de presença ainda serializam os nomes internos `Present`, `JustifiedAbsence` e `UnjustifiedAbsence`; o frontend deve tratar essa diferença explicitamente.
 
+### Correção administrativa de presenças
+
+O sistema permite que a Diretoria corrija uma participação já finalizada.
+
+A correção administrativa exige:
+
+- Participação existente.
+- Status anterior finalizado.
+- Novo status válido e finalizado.
+- Justificativa administrativa obrigatória.
+- Dados adicionais compatíveis com o novo status.
+
+O sistema impede correções que não produzam uma alteração efetiva na participação.
+
+As correções são registradas em auditoria, preservando informações como:
+
+- Status anterior e novo status.
+- Dados anteriores e novos da participação.
+- Identificação do diretor responsável.
+- Motivo administrativo da alteração.
+- Data e horário da correção em UTC.
+
+A atualização da participação e o registro de auditoria são realizados em uma transação, evitando alterações parciais.
+
 ### Frequência
 
 A frequência individual é calculada como `presenças / (presenças + faltas não justificadas) × 100`. Faltas justificadas não entram no denominador e o percentual é `null` quando não há ocorrências válidas para o cálculo.
 
 O histórico individual é isolado pelo membro autenticado, aceita o filtro opcional `dias` (inteiro maior que zero), exclui eventos cancelados ou ainda não encerrados e participações pendentes, e informa `PRESENTE`, `ATRASO`, `FALTA_JUSTIFICADA` ou `FALTA_NAO_JUSTIFICADA`. A aprovação de uma justificativa altera a participação e, consequentemente, os indicadores de frequência.
+
+**Observação:** a fórmula de frequência individual é diferente da fórmula utilizada no resumo geral de eventos. Na frequência individual, faltas justificadas não entram no denominador. Na presença média dos eventos, elas são consideradas entre as participações finalizadas.
 
 ### Relatórios de frequência e presença
 
@@ -277,6 +365,7 @@ As rotas de gerenciamento de membros exigem autenticação JWT com o perfil `Dir
 |---|---|---|---|
 | GET | `/api/events` | Listagem de eventos | Autenticado |
 | GET | `/api/events/{id}` | Consulta de evento por ID | Autenticado |
+| GET | `/api/events/summary` | Resumo dos eventos e presença média | Diretoria |
 | POST | `/api/events` | Criação de evento e inscrição automática dos membros ativos | Diretoria |
 | PUT | `/api/events/{id}` | Atualização de evento | Diretoria |
 | PATCH | `/api/events/{id}/cancel` | Cancelamento lógico de evento | Diretoria |
@@ -473,6 +562,22 @@ Caso a ferramenta do Entity Framework ainda não esteja instalada:
 dotnet tool install --global dotnet-ef
 ```
 
+Para verificar as migrations aplicadas:
+
+```bash
+dotnet ef migrations list \
+  --project src/IncludePresenca.Infrastructure \
+  --startup-project src/IncludePresenca.Api
+```
+
+Para verificar alterações pendentes no modelo:
+
+```bash
+dotnet ef migrations has-pending-model-changes \
+  --project src/IncludePresenca.Infrastructure \
+  --startup-project src/IncludePresenca.Api
+```
+
 ### 6. Executar a API
 
 ```bash
@@ -485,9 +590,57 @@ No ambiente de desenvolvimento configurado, a API estará disponível em:
 http://localhost:5045
 ```
 
-### 7. Testar Check-in, Frequência, Relatórios e Justificativas
+### 7. Testar os eventos e o resumo
 
-Os testes manuais devem usar a base de desenvolvimento `include_presenca` somente quando a intenção for validar o ambiente local. Para os testes automatizados de integração, utilize uma base PostgreSQL separada, configurada pela variável de ambiente `INCLUDE_PRESENCA_TEST_CONNECTION`. Não use a base de testes para o acesso manual ao site e não exponha a string de conexão, senhas ou outros segredos.
+Com a API em execução, autentique uma conta com perfil `Diretoria`:
+
+```bash
+curl -X POST http://localhost:5045/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "EMAIL_DIRETORIA",
+    "password": "SENHA_DIRETORIA"
+  }'
+```
+
+Com o `accessToken` retornado, configure a variável de ambiente no terminal:
+
+```bash
+TOKEN="SEU_ACCESS_TOKEN"
+```
+
+Para criar um evento:
+
+```bash
+curl -i -X POST http://localhost:5045/api/events \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Reunião Geral Include Jr",
+    "description": "Reunião de acompanhamento dos projetos",
+    "startsAt": "2026-11-20T14:00:00Z",
+    "endsAt": "2026-11-20T16:00:00Z"
+  }'
+```
+
+As datas acima são apenas exemplos e devem ser ajustadas conforme o cenário de teste.
+
+Para consultar o resumo:
+
+```bash
+curl -s http://localhost:5045/api/events/summary \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+A consulta exige um JWT válido com perfil `Diretoria`.
+
+### 8. Testar Check-in, Frequência e Relatórios
+
+Os testes manuais devem usar a base de desenvolvimento `include_presenca` somente quando a intenção for validar o ambiente local.
+
+Para os testes automatizados de integração, utilize uma base PostgreSQL separada, configurada pela variável de ambiente `INCLUDE_PRESENCA_TEST_CONNECTION`.
+
+Não use a base de testes para o acesso manual ao site e não exponha a string de conexão, senhas ou outros segredos.
 
 Para iniciar a API:
 
@@ -495,7 +648,9 @@ Para iniciar a API:
 dotnet run --project src/IncludePresenca.Api --launch-profile http
 ```
 
-A API ficará disponível em `http://localhost:5045`. Com um JWT válido, o arquivo [src/IncludePresenca.Api/IncludePresenca.Api.http](src/IncludePresenca.Api/IncludePresenca.Api.http) contém exemplos para consultar presenças, gerar o código de check-in, registrar presença e atualizar manualmente uma participação.
+A API ficará disponível em `http://localhost:5045`.
+
+Com um JWT válido, o arquivo [src/IncludePresenca.Api/IncludePresenca.Api.http](src/IncludePresenca.Api/IncludePresenca.Api.http) contém exemplos para consultar presenças, gerar o código de check-in, registrar presença e atualizar manualmente uma participação.
 
 Fluxo manual recomendado:
 
@@ -562,19 +717,58 @@ Tabelas implementadas:
 - `SolicitacoesJustificativas`
 - `AuditoriaSolicitacoesJustificativas`
 
-As participações de eventos também armazenam o status (`Pending`, `Present`, `JustifiedAbsence` ou `UnjustifiedAbsence`), o instante do check-in em UTC, a justificativa e o instante da justificativa. A tabela `CodigosCheckin` mantém um único código por evento, armazenado como hash, com os instantes UTC de criação e expiração.
+O sistema também possui persistência de auditoria das correções administrativas de presença, por meio da entidade `EventParticipationAudit`.
+
+As participações de eventos armazenam:
+
+- Identificação do evento.
+- Identificação do membro.
+- Status da participação.
+- Instante do check-in em UTC.
+- Justificativa de ausência.
+- Instante da justificativa em UTC.
+
+Os status disponíveis são:
+
+- `Pending`
+- `Present`
+- `JustifiedAbsence`
+- `UnjustifiedAbsence`
+
+A tabela `CodigosCheckin` mantém um único código por evento, armazenado como hash, com os instantes UTC de criação e expiração.
 
 As solicitações de justificativa armazenam o membro, a participação, o motivo, a descrição, o status, os metadados do anexo e os instantes de envio e decisão. O conteúdo dos anexos é mantido em armazenamento privado; a API não expõe caminho físico nem permite acesso sem autorização. As decisões também são registradas em `AuditoriaSolicitacoesJustificativas`.
 
 O projeto também utiliza uma abstração de unidade de trabalho (`IUnitOfWork`) para operações de persistência e execução transacional.
 
-As migrations `AddEventParticipationAttendanceFields` e `AddEventCheckInCodes` adicionam os dados de presença e a estrutura dos códigos de check-in.
+### Migrations
+
+As principais migrations implementadas são:
+
+| Migration | Descrição |
+|---|---|
+| `InitialIdentity` | Estrutura inicial de identidade |
+| `AddActivationTokens` | Tokens de ativação |
+| `AddPasswordResetTokens` | Tokens de recuperação de senha |
+| `AddPasswordResetTokenCreatedAt` | Data de criação dos tokens de recuperação |
+| `AddEventsAndParticipations` | Eventos e participações |
+| `AddEventParticipationAttendanceFields` | Campos de presença e justificativa |
+| `AddEventCheckInCodes` | Códigos temporários de check-in |
+| `AddEventParticipationAudits` | Auditoria de correções administrativas |
 
 A migration `AddEventsAndParticipations` adiciona as tabelas de eventos e participações, com chaves estrangeiras para os membros e restrição de unicidade por evento e participante.
 
+A migration `AddEventParticipationAttendanceFields` adiciona os campos necessários para registrar o resultado das participações.
+
+A migration `AddEventCheckInCodes` adiciona a estrutura de armazenamento dos códigos de check-in.
+
+A migration `AddEventParticipationAudits` adiciona a persistência dos registros de auditoria das correções administrativas.
+
+O módulo de resumo de eventos utiliza as estruturas existentes e não necessita de uma migration específica.
+
 ## Validações realizadas
 
-Durante o desenvolvimento dos módulos de identidade, gerenciamento de membros e eventos, foram realizadas verificações manuais dos principais fluxos.
+Durante o desenvolvimento, foram realizadas verificações manuais dos principais fluxos.
 
 | Funcionalidade | Resultado |
 |---|---|
@@ -612,8 +806,17 @@ Durante o desenvolvimento dos módulos de identidade, gerenciamento de membros e
 | Envio multipart, validação e armazenamento privado de anexos | Validado |
 | Bloqueio de justificativas duplicadas e fora do prazo | Validado |
 | Aprovação/rejeição, auditoria e atualização da frequência | Validado |
+| Consulta do resumo de eventos pela Diretoria | Validado (`200 OK`) |
+| Identificação do próximo evento futuro | Validado |
+| Contagem de eventos no mês | Validado |
+| Retorno de `null` para presença média sem participações finalizadas elegíveis | Validado |
+| Cálculo da presença média com participações finalizadas | Implementado, pendente de validação manual específica |
 
 As verificações foram realizadas localmente por meio de requisições HTTP, consultas ao PostgreSQL isolado e inspeção dos registros da aplicação. A suíte automatizada validada no ambiente de teste PostgreSQL aprovou 206 testes, com 0 falhas e 0 ignorados. Isso comprova os fluxos cobertos pela suíte; não representa integração completa com o frontend.
+
+### Testes automatizados
+
+A solução possui uma suíte de testes automatizados utilizando xUnit. A validação mais recente aprovou 206 testes, com 0 falhas e 0 ignorados, incluindo os fluxos HTTP, PostgreSQL e integração disponíveis no projeto. As verificações manuais e automatizadas são complementares.
 
 ## Roadmap
 
@@ -651,6 +854,26 @@ As verificações foram realizadas localmente por meio de requisições HTTP, co
 - [x] Edição e cancelamento lógico de eventos
 - [x] Inscrição automática de membros ativos, incluindo a Diretoria
 - [x] Autorização por perfil nos endpoints de eventos
+- [x] Endpoint de resumo de eventos
+- [x] Identificação do próximo evento
+- [x] Contagem de eventos no mês
+- [x] Implementação do cálculo de presença média
+- [x] Validação manual da consulta e dos indicadores de próximo evento e eventos no mês
+- [ ] Validação manual da presença média com participações finalizadas
+
+### Check-in e frequência
+
+- [x] Geração de códigos temporários de check-in
+- [x] Validação e expiração dos códigos
+- [x] Registro de presença
+- [x] Atualização manual de presenças
+- [x] Correção administrativa de participações finalizadas
+- [x] Auditoria das correções administrativas
+- [x] Cálculo de frequência individual
+- [x] Histórico de participações
+- [x] Relatórios de participação
+- [x] Exportação de relatórios em CSV
+- [x] Integração entre os módulos de Check-in, Frequência e Relatórios
 
 ### Próximas etapas
 
@@ -661,6 +884,9 @@ As verificações foram realizadas localmente por meio de requisições HTTP, co
 - [x] Integração entre Check-in, Frequência, Relatórios e Justificativas
 - [x] Suíte automatizada com persistência PostgreSQL isolada
 - [ ] Integração com o frontend
+- [ ] Validação manual completa da presença média
+- [ ] Integração do endpoint de resumo com o frontend
+- [ ] Integração completa com o frontend
 - [ ] Ampliação da cobertura de testes
 
 ## Status do projeto
@@ -670,6 +896,7 @@ As verificações foram realizadas localmente por meio de requisições HTTP, co
 Os módulos de identidade, autenticação, gerenciamento de membros e gerenciamento de eventos estão implementados, com seus principais fluxos validados localmente.
 
 A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria. Os módulos de Check-in, Frequência, Relatórios e Justificativas estão implementados no backend, com persistência PostgreSQL, autenticação JWT, autorização por perfil e 206 testes automatizados aprovados.
+A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria. O resumo de eventos também está implementado, disponibilizando informações sobre o próximo evento, a quantidade de eventos no mês e a presença média; seu endpoint `GET /api/events/summary` foi validado manualmente com autenticação da Diretoria. O cálculo de presença média permanece com validação manual específica pendente para participações finalizadas.
 
 A integração completa com o frontend ainda não deve ser considerada concluída. Permanecem ajustes nos tipos de GUID, desativação dos mocks ativos por padrão, compatibilidade dos status e contratos do módulo de Eventos e conexão efetiva da tela de Relatórios. Esses ajustes dependem dos responsáveis pelo frontend e pelos módulos correspondentes.
 

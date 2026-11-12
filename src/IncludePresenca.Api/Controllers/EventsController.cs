@@ -16,19 +16,22 @@ public class EventsController : ControllerBase
     private readonly GetEventByIdUseCase _getEventByIdUseCase;
     private readonly UpdateEventUseCase _updateEventUseCase;
     private readonly CancelEventUseCase _cancelEventUseCase;
+    private readonly GetEventSummaryUseCase _getEventSummaryUseCase;
 
     public EventsController(
         CreateEventUseCase createEventUseCase,
         GetEventsUseCase getEventsUseCase,
         GetEventByIdUseCase getEventByIdUseCase,
         UpdateEventUseCase updateEventUseCase,
-        CancelEventUseCase cancelEventUseCase)
+        CancelEventUseCase cancelEventUseCase,
+        GetEventSummaryUseCase getEventSummaryUseCase)
     {
         _createEventUseCase = createEventUseCase;
         _getEventsUseCase = getEventsUseCase;
         _getEventByIdUseCase = getEventByIdUseCase;
         _updateEventUseCase = updateEventUseCase;
         _cancelEventUseCase = cancelEventUseCase;
+        _getEventSummaryUseCase = getEventSummaryUseCase;
     }
 
     [HttpGet]
@@ -77,5 +80,16 @@ public class EventsController : ControllerBase
         await _cancelEventUseCase.ExecuteAsync(id);
 
         return NoContent();
+    }
+
+    [HttpGet("summary")]
+    [Authorize(Roles = "Diretoria")]
+    public async Task<ActionResult<EventSummaryResponse>> GetSummary(
+        CancellationToken cancellationToken)
+    {
+        EventSummaryResponse response =
+            await _getEventSummaryUseCase.ExecuteAsync(cancellationToken);
+
+        return Ok(response);
     }
 }

@@ -343,6 +343,13 @@ public sealed class CorrectEventAttendanceUseCaseTests
             LastForUpdate = forUpdate;
             return Task.FromResult(Participation);
         }
+
+        public Task<List<EventParticipation>> GetByEventIdsAsync(
+            List<Guid> eventIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new List<EventParticipation>());
+        }
     }
 
     private sealed class FakeAuditRepository : IEventParticipationAuditRepository
