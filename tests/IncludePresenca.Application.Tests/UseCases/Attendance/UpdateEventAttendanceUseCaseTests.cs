@@ -132,6 +132,13 @@ public sealed class UpdateEventAttendanceUseCaseTests
                 eventId == participation.EventId && memberId == participation.MemberId
                     ? participation
                     : null);
+
+        public Task<List<EventParticipation>> GetByEventIdsAsync(
+            List<Guid> eventIds,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new List<EventParticipation>());
+        }
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork
