@@ -92,6 +92,7 @@ builder.Services.AddScoped<GenerateEventCheckInCodeUseCase>();
 builder.Services.AddScoped<GetEventAttendancesUseCase>();
 builder.Services.AddScoped<CheckInEventUseCase>();
 builder.Services.AddScoped<UpdateEventAttendanceUseCase>();
+builder.Services.AddScoped<CorrectEventAttendanceUseCase>();
 builder.Services.AddScoped<CheckInCodeGenerator>();
 builder.Services.AddScoped<CheckInCodeValidator>();
 builder.Services.AddScoped<FrequencyCalculator>();
@@ -108,6 +109,7 @@ builder.Services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSend
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>(); 
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IEventParticipationRepository, EventParticipationRepository>();
+builder.Services.AddScoped<IEventParticipationAuditRepository, EventParticipationAuditRepository>();
 builder.Services.AddScoped<IEventCheckInCodeRepository, EventCheckInCodeRepository>();
 
 builder.Services.AddRateLimiter(options =>

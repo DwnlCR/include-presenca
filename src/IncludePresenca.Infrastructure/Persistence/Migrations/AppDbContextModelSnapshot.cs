@@ -151,6 +151,77 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                     b.ToTable("ParticipacoesEventos", (string)null);
                 });
 
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.EventParticipationAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ChangedByMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NewCheckedInAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewJustification")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("NewJustifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("ParticipationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PreviousCheckedInAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousJustification")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("PreviousJustifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedAtUtc");
+
+                    b.HasIndex("ChangedByMemberId");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("ParticipationId", "ChangedAtUtc");
+
+                    b.ToTable("AuditoriaParticipacoesEventos", (string)null);
+                });
+
             modelBuilder.Entity("IncludePresenca.Domain.Entities.Member", b =>
                 {
                     b.Property<Guid>("Id")
@@ -260,6 +331,41 @@ namespace IncludePresenca.Infrastructure.Persistence.Migrations
                     b.Navigation("Event");
 
                     b.Navigation("Member");
+                });
+
+            modelBuilder.Entity("IncludePresenca.Domain.Entities.EventParticipationAudit", b =>
+                {
+                    b.HasOne("IncludePresenca.Domain.Entities.Member", "ChangedByMember")
+                        .WithMany()
+                        .HasForeignKey("ChangedByMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("IncludePresenca.Domain.Entities.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("IncludePresenca.Domain.Entities.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("IncludePresenca.Domain.Entities.EventParticipation", "Participation")
+                        .WithMany()
+                        .HasForeignKey("ParticipationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ChangedByMember");
+
+                    b.Navigation("Event");
+
+                    b.Navigation("Member");
+
+                    b.Navigation("Participation");
                 });
 
             modelBuilder.Entity("IncludePresenca.Domain.Entities.PasswordResetToken", b =>

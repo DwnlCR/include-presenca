@@ -42,6 +42,10 @@ public class UpdateEventAttendanceUseCase
             .GetByEventAndMemberIdAsync(eventId, memberId, forUpdate: true, cancellationToken)
             ?? throw new KeyNotFoundException("Participation not found.");
 
+        if (participation.Status != EventParticipationStatus.Pending)
+            throw new InvalidOperationException(
+                "Only pending participation can be updated by the normal attendance flow.");
+
         DateTime nowUtc = DateTime.UtcNow;
 
         switch (status)

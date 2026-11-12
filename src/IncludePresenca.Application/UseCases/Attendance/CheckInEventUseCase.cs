@@ -14,6 +14,7 @@ public class CheckInEventUseCase
     private readonly IUnitOfWork _unitOfWork;
     private readonly CheckInCodeValidator _codeValidator;
     private readonly CheckInCodeGenerator _codeGenerator;
+    private readonly TimeProvider _timeProvider;
 
     public CheckInEventUseCase(
         IEventRepository eventRepository,
@@ -21,7 +22,8 @@ public class CheckInEventUseCase
         IEventCheckInCodeRepository codeRepository,
         IUnitOfWork unitOfWork,
         CheckInCodeValidator codeValidator,
-        CheckInCodeGenerator codeGenerator)
+        CheckInCodeGenerator codeGenerator,
+        TimeProvider? timeProvider = null)
     {
         _eventRepository = eventRepository;
         _participationRepository = participationRepository;
@@ -29,6 +31,7 @@ public class CheckInEventUseCase
         _unitOfWork = unitOfWork;
         _codeValidator = codeValidator;
         _codeGenerator = codeGenerator;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<CheckInResponse> ExecuteAsync(
@@ -49,7 +52,10 @@ public class CheckInEventUseCase
         if (eventEntity.IsCancelled)
             throw new InvalidOperationException("Cannot check in to a cancelled event.");
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (nowUtc < eventEntity.StartsAt || nowUtc >= eventEntity.EndsAt)
+            throw new InvalidOperationException("Check-in is only available during the event.");
 
         CheckInResponse? response = null;
 

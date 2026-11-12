@@ -37,3 +37,14 @@ Content-Type: application/json
   "status": "Present",
   "justification": null
 }
+
+### Corrigir presença finalizada (Diretoria)
+PATCH {{IncludePresenca.Api_HostAddress}}/api/eventos/{{eventoId}}/presencas/{{membroId}}/correcao
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "Present",
+  "administrativeReason": "Lista assinada conferida pela Diretoria",
+  "checkedInAtUtc": "2026-11-11T13:00:00Z"
+}
