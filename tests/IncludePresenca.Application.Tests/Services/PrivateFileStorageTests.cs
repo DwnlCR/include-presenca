@@ -45,4 +45,24 @@ public class PrivateFileStorageTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public async Task SaveAsync_RejectsContentLargerThanFiveMegabytesEvenWhenDeclaredLengthIsSmaller()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "include-presenca-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            PrivateFileStorage storage = new(Options.Create(new PrivateFileStorageOptions { RootPath = root }));
+            byte[] content = new byte[(5 * 1024 * 1024) + 1];
+            Array.Copy("%PDF-"u8.ToArray(), content, 5);
+            await using MemoryStream stream = new(content);
+
+            await Assert.ThrowsAsync<ArgumentException>(() => storage.SaveAsync(
+                new AttachmentUpload(stream, "comprovante.pdf", "application/pdf", 1)));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
 }

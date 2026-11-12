@@ -62,6 +62,33 @@ public sealed class UpdateEventAttendanceUseCaseTests
         Assert.Equal(1, unitOfWork.SaveChangesCalls);
     }
 
+    [Theory]
+    [InlineData("PRESENTE", EventParticipationStatus.Present)]
+    [InlineData("FALTA_JUSTIFICADA", EventParticipationStatus.JustifiedAbsence)]
+    [InlineData("FALTA_NAO_JUSTIFICADA", EventParticipationStatus.UnjustifiedAbsence)]
+    public async Task ExecuteAsync_FrontendStatusNames_AreAccepted(
+        string status,
+        EventParticipationStatus expectedStatus)
+    {
+        Event eventEntity = new("Event", null, StartsAt, EndsAt);
+        EventParticipation participation = new(eventEntity.Id, MemberId);
+        SetMember(participation);
+        FakeUnitOfWork unitOfWork = new();
+        UpdateEventAttendanceUseCase useCase = CreateUseCase(eventEntity, participation, unitOfWork);
+
+        await useCase.ExecuteAsync(
+            eventEntity.Id,
+            MemberId,
+            new UpdateAttendanceRequest(
+                status,
+                expectedStatus == EventParticipationStatus.JustifiedAbsence
+                    ? "Consulta médica"
+                    : null));
+
+        Assert.Equal(expectedStatus, participation.Status);
+        Assert.Equal(1, unitOfWork.SaveChangesCalls);
+    }
+
     private static UpdateEventAttendanceUseCase CreateUseCase(
         Event eventEntity,
         EventParticipation participation,

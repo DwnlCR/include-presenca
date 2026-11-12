@@ -38,6 +38,9 @@ public sealed class CorrectEventAttendanceUseCase
         DateTime? justifiedAtUtc = null,
         CancellationToken cancellationToken = default)
     {
+        checkedInAtUtc = NormalizePostgresTimestamp(checkedInAtUtc);
+        justifiedAtUtc = NormalizePostgresTimestamp(justifiedAtUtc);
+
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             Event eventEntity = await _eventRepository.GetByIdAsync(eventId)
@@ -184,5 +187,15 @@ public sealed class CorrectEventAttendanceUseCase
             throw new InvalidOperationException(
                 "Attendance correction does not change participation.");
         }
+    }
+
+    private static DateTime? NormalizePostgresTimestamp(DateTime? value)
+    {
+        if (value is null)
+            return null;
+
+        long ticks = value.Value.Ticks;
+        long precision = TimeSpan.TicksPerMicrosecond;
+        return new DateTime(ticks - ticks % precision, value.Value.Kind);
     }
 }

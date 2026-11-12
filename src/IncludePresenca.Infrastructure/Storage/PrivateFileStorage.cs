@@ -35,6 +35,9 @@ public sealed class PrivateFileStorage : IPrivateFileStorage
         await using MemoryStream buffer = new();
         await file.Content.CopyToAsync(buffer, cancellationToken);
         byte[] bytes = buffer.ToArray();
+        if (bytes.LongLength is <= 0 or > MaxLength)
+            throw new ArgumentException("Attachment content must be between 1 byte and 5 MB.", nameof(file));
+
         if (!HasValidSignature(bytes, extension))
             throw new ArgumentException("Attachment content does not match its declared type.", nameof(file));
 

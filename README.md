@@ -178,57 +178,34 @@ A inscrição automática não representa confirmação de presença. A confirma
 
 ### Check-in e controle de presenças
 
-O sistema permite gerar um código temporário para confirmação de presença em um evento.
+O Check-in vincula uma participação elegível ao membro autenticado pelo JWT. A Diretoria gera um código numérico de seis dígitos; somente o hash SHA-256 é persistido, o código expira em 15 minutos e uma nova geração substitui o anterior.
 
 Regras implementadas:
 
-- O código possui exatamente 6 dígitos numéricos.
-- O código é gerado com fonte criptograficamente segura.
-- Apenas o hash SHA-256 do código é armazenado no banco.
-- O código expira 15 minutos após sua geração.
-- Uma nova geração renova e substitui o código anterior do evento.
-- Não é possível gerar código ou registrar presença em evento cancelado.
-- A geração do código e a atualização manual das presenças exigem perfil `Diretoria`.
-- O check-in exige autenticação e participação elegível do membro no evento.
-- O código precisa existir, estar dentro da validade e corresponder ao valor informado.
-- Uma participação já finalizada não pode receber outro check-in.
-- O endpoint de check-in aceita no máximo 10 tentativas por minuto por endereço IP.
-- O check-in é marcado como atrasado quando ocorre mais de 10 minutos após o início do evento.
+- código gerado com fonte criptograficamente segura;
+- evento cancelado, evento fora do período permitido, código inexistente ou expirado rejeitam o check-in;
+- participação finalizada não pode ser registrada novamente;
+- limite de 10 tentativas por minuto por IP no endpoint de check-in;
+- check-in realizado mais de 10 minutos após o início é marcado como atraso;
+- consulta e correção manual exigem `Diretoria`, com auditoria na correção.
 
-As presenças podem ser consultadas pela Diretoria, e a Diretoria também pode classificá-las manualmente como presença, falta justificada ou falta não justificada.
+Os status de presença aceitos na correção administrativa são `PRESENTE`, `FALTA_JUSTIFICADA` e `FALTA_NAO_JUSTIFICADA` (também são aceitos os nomes internos em inglês). Algumas respostas de presença ainda serializam os nomes internos `Present`, `JustifiedAbsence` e `UnjustifiedAbsence`; o frontend deve tratar essa diferença explicitamente.
 
 ### Frequência
 
-A frequência individual é calculada pela fórmula:
+A frequência individual é calculada como `presenças / (presenças + faltas não justificadas) × 100`. Faltas justificadas não entram no denominador e o percentual é `null` quando não há ocorrências válidas para o cálculo.
 
-```text
-presenças / (presenças + faltas não justificadas) × 100
-```
-
-Faltas justificadas não entram no denominador. O percentual é `null` quando não existem presenças nem faltas não justificadas válidas para o cálculo.
-
-O histórico de participações:
-
-- pode ser consultado pelo próprio usuário autenticado;
-- pode receber o filtro opcional `dias`, que deve ser maior que zero;
-- exclui eventos cancelados;
-- exclui eventos que ainda não terminaram;
-- exclui participações ainda pendentes;
-- informa presença, falta justificada, falta não justificada e atraso.
+O histórico individual é isolado pelo membro autenticado, aceita o filtro opcional `dias` (inteiro maior que zero), exclui eventos cancelados ou ainda não encerrados e participações pendentes, e informa `PRESENTE`, `ATRASO`, `FALTA_JUSTIFICADA` ou `FALTA_NAO_JUSTIFICADA`. A aprovação de uma justificativa altera a participação e, consequentemente, os indicadores de frequência.
 
 ### Relatórios de frequência e presença
 
-A Diretoria pode consultar:
+Os relatórios são exclusivos da `Diretoria` e consolidam apenas dados persistidos de participações elegíveis. O relatório global informa totais, membros ativos e membros abaixo da meta atualmente implementada de 75%; o relatório por membro informa presenças, faltas, atrasos e percentual. O relatório por membro também pode ser exportado em CSV UTF-8, com escaping de campos e proteção contra fórmulas de planilhas.
 
-- relatório global de frequência;
-- relatório de frequência por membro;
-- presenças, faltas justificadas, faltas não justificadas e atrasos;
-- quantidade de membros ativos;
-- membros abaixo da meta atualmente implementada de 75%.
+### Justificativas
 
-O percentual de 75% é uma regra atualmente implementada para o indicador `abaixoDaMeta` e ainda depende de confirmação da equipe como meta oficial do produto.
+Um membro pode justificar uma falta não justificada dentro do prazo de 48 horas após o encerramento do evento. O envio exige motivo, descrição entre 50 e 2.000 caracteres e, opcionalmente, anexo privado PDF, PNG ou JPEG de até 5 MB. Não são permitidas solicitações pendentes ou aprovadas duplicadas para a mesma falta.
 
-O relatório por membro também pode ser exportado em CSV UTF-8. O exportador escapa aspas e vírgulas, preserva valores nulos e prefixa valores que poderiam ser interpretados como fórmulas por planilhas.
+A Diretoria consulta a fila e decide `APROVADA` ou `REJEITADA`. A aprovação converte a participação para falta justificada, atualiza a frequência e registra auditoria; ambas as decisões são auditadas.
 
 ### Recuperação de senha
 
@@ -327,6 +304,71 @@ As rotas de gerenciamento de membros exigem autenticação JWT com o perfil `Dir
 | GET | `/api/relatorios/frequencia-global` | Relatório global de frequência | Diretoria |
 | GET | `/api/relatorios/presencas` | Relatório de presenças e frequência por membro | Diretoria |
 | GET | `/api/relatorios/presencas.csv` | Exportação do relatório por membro em CSV | Diretoria |
+
+### Justificativas
+
+| Método | Endpoint | Descrição | Acesso |
+|---|---|---|---|
+| GET | `/api/me/faltas?semJustificativa={bool}` | Lista faltas elegíveis para justificativa; o filtro é opcional | Usuário autenticado |
+| GET | `/api/me/justificativas` | Lista as justificativas do próprio membro | Usuário autenticado |
+| POST | `/api/me/justificativas` | Envia uma justificativa em `multipart/form-data` | Usuário autenticado |
+| GET | `/api/justificativas` | Consulta a fila de justificativas | Diretoria |
+| PATCH | `/api/justificativas/{id}` | Aprova ou rejeita uma justificativa | Diretoria |
+
+Todas as rotas protegidas exigem `Authorization: Bearer <JWT>`. Os identificadores `{eventoId}`, `{membroId}`, `{faltaId}` e `{id}` são GUIDs.
+
+#### Payloads e respostas principais
+
+Geração e check-in:
+
+```http
+POST /api/eventos/{eventoId}/codigos-checkin
+Authorization: Bearer <JWT-DIRETORIA>
+```
+
+```json
+POST /api/eventos/{eventoId}/checkin
+Authorization: Bearer <JWT-MEMBRO>
+Content-Type: application/json
+
+{ "codigo": "123456" }
+```
+
+O check-in retorna `200 OK` com `participacaoId`, `status`, `checkedInAtUtc` e `isLate`. A geração retorna `200 OK` com o código em texto e sua expiração; falhas de validação retornam `400`, falta de autenticação `401`, falta de permissão `403`, conflito de participação `409` e excesso de tentativas `429`.
+
+Correção administrativa:
+
+```http
+PATCH /api/eventos/{eventoId}/presencas/{membroId}
+Authorization: Bearer <JWT-DIRETORIA>
+Content-Type: application/json
+
+{ "status": "FALTA_JUSTIFICADA", "justification": "Motivo administrativo" }
+```
+
+Essa operação retorna `200 OK`. A correção auditada usa `PATCH /api/eventos/{eventoId}/presencas/{membroId}/correcao`, exige `administrativeReason` e retorna `204 No Content`.
+
+Envio de justificativa:
+
+```text
+POST /api/me/justificativas
+Content-Type: multipart/form-data
+
+FaltaId: <GUID>
+Motivo: SAUDE | TRABALHO_ESTUDOS | PROBLEMAS_TECNICOS | OUTRO
+Descricao: texto com 50 a 2000 caracteres
+Anexo: arquivo opcional PDF, PNG ou JPEG (até 5 MB)
+```
+
+O envio retorna `201 Created`; duplicidade, falta inelegível ou fora do prazo retornam `409 Conflict`, e arquivo ou campos inválidos retornam `400 Bad Request`. A decisão usa:
+
+```json
+{ "status": "APROVADA" }
+```
+
+ou `{ "status": "REJEITADA" }` e retorna `204 No Content`.
+
+As respostas de frequência usam os campos `totalEventos`, `presencas`, `faltasJustificadas`, `faltasNaoJustificadas`, `atrasos` e `percentual`. O histórico usa GUIDs para `id` e `eventoId`; `GET /api/me/presencas` retorna `200 OK` e aceita `dias` maior que zero.
 
 ## Configuração do ambiente
 
@@ -443,7 +485,7 @@ No ambiente de desenvolvimento configurado, a API estará disponível em:
 http://localhost:5045
 ```
 
-### 7. Testar Check-in, Frequência e Relatórios
+### 7. Testar Check-in, Frequência, Relatórios e Justificativas
 
 Os testes manuais devem usar a base de desenvolvimento `include_presenca` somente quando a intenção for validar o ambiente local. Para os testes automatizados de integração, utilize uma base PostgreSQL separada, configurada pela variável de ambiente `INCLUDE_PRESENCA_TEST_CONNECTION`. Não use a base de testes para o acesso manual ao site e não exponha a string de conexão, senhas ou outros segredos.
 
@@ -464,13 +506,26 @@ Fluxo manual recomendado:
 5. Consulte `/api/me/frequencia` e `/api/me/presencas` com o membro.
 6. Consulte `/api/relatorios/frequencia-global`, `/api/relatorios/presencas` ou baixe `/api/relatorios/presencas.csv` com a Diretoria.
 
+Para justificar uma falta, use o membro autenticado em `/api/me/faltas`, envie o formulário multipart para `/api/me/justificativas` e depois decida a solicitação com a conta de `Diretoria` em `/api/justificativas/{id}`.
+
 Para executar os testes automatizados:
 
-```bash
-dotnet test IncludePresenca.sln
+```powershell
+$env:INCLUDE_PRESENCA_TEST_CONNECTION="Host=localhost;Port=5433;Database=include_presenca_migrations_test;Username=postgres;Password=SENHA_LOCAL_DO_BANCO_DE_TESTE"
+dotnet test tests/IncludePresenca.Application.Tests/IncludePresenca.Application.Tests.csproj --no-restore --verbosity minimal
 ```
 
-Os testes de integração PostgreSQL só devem ser executados quando `INCLUDE_PRESENCA_TEST_CONNECTION` apontar para uma base de testes separada da base de desenvolvimento. A suíte não deve receber credenciais diretamente no README, no código ou no histórico do Git.
+No PowerShell, use `$env:INCLUDE_PRESENCA_TEST_CONNECTION` com a senha definida localmente; no Bash, exporte a mesma variável com `export`. O valor acima é apenas um modelo e não é uma credencial do projeto.
+
+Antes da suíte PostgreSQL, confirme que o container é o ambiente isolado esperado e que a porta local está acessível:
+
+```powershell
+docker ps --filter "name=^include_presenca_test_db$"
+docker exec include_presenca_test_db pg_isready -U postgres -d include_presenca_migrations_test
+docker exec include_presenca_test_db psql -U postgres -d include_presenca_migrations_test -c "SELECT current_database();"
+```
+
+O banco de testes deve ser `include_presenca_migrations_test` no container `include_presenca_test_db`, publicado em `localhost:5433`, e deve permanecer separado do banco de desenvolvimento `include_presenca` em `localhost:5432`. Não execute os testes apontando para produção ou para a base de desenvolvimento.
 
 ## Administrador inicial
 
@@ -504,8 +559,12 @@ Tabelas implementadas:
 - `Eventos`
 - `ParticipacoesEventos`
 - `CodigosCheckin`
+- `SolicitacoesJustificativas`
+- `AuditoriaSolicitacoesJustificativas`
 
 As participações de eventos também armazenam o status (`Pending`, `Present`, `JustifiedAbsence` ou `UnjustifiedAbsence`), o instante do check-in em UTC, a justificativa e o instante da justificativa. A tabela `CodigosCheckin` mantém um único código por evento, armazenado como hash, com os instantes UTC de criação e expiração.
+
+As solicitações de justificativa armazenam o membro, a participação, o motivo, a descrição, o status, os metadados do anexo e os instantes de envio e decisão. O conteúdo dos anexos é mantido em armazenamento privado; a API não expõe caminho físico nem permite acesso sem autorização. As decisões também são registradas em `AuditoriaSolicitacoesJustificativas`.
 
 O projeto também utiliza uma abstração de unidade de trabalho (`IUnitOfWork`) para operações de persistência e execução transacional.
 
@@ -549,10 +608,12 @@ Durante o desenvolvimento dos módulos de identidade, gerenciamento de membros e
 | Cálculo de frequência individual e histórico de participações | Validado |
 | Relatórios global e por membro | Validado |
 | Exportação do relatório de presenças em CSV | Validado |
+| Isolamento e autorização da frequência individual | Validado |
+| Envio multipart, validação e armazenamento privado de anexos | Validado |
+| Bloqueio de justificativas duplicadas e fora do prazo | Validado |
+| Aprovação/rejeição, auditoria e atualização da frequência | Validado |
 
-As verificações foram realizadas localmente por meio de requisições HTTP, consultas ao PostgreSQL e inspeção dos registros da aplicação.
-
-Essas verificações não substituem uma suíte de testes automatizados.
+As verificações foram realizadas localmente por meio de requisições HTTP, consultas ao PostgreSQL isolado e inspeção dos registros da aplicação. A suíte automatizada validada no ambiente de teste PostgreSQL aprovou 206 testes, com 0 falhas e 0 ignorados. Isso comprova os fluxos cobertos pela suíte; não representa integração completa com o frontend.
 
 ## Roadmap
 
@@ -594,10 +655,11 @@ Essas verificações não substituem uma suíte de testes automatizados.
 ### Próximas etapas
 
 - [x] Registro de presença e ausência
-- [ ] Controle de justificativas
+- [x] Controle de justificativas
 - [x] Cálculo de frequência
 - [x] Relatórios de participação
-- [x] Integração entre os módulos de Check-in, Frequência e Relatórios
+- [x] Integração entre Check-in, Frequência, Relatórios e Justificativas
+- [x] Suíte automatizada com persistência PostgreSQL isolada
 - [ ] Integração com o frontend
 - [ ] Ampliação da cobertura de testes
 
@@ -607,9 +669,9 @@ Essas verificações não substituem uma suíte de testes automatizados.
 
 Os módulos de identidade, autenticação, gerenciamento de membros e gerenciamento de eventos estão implementados, com seus principais fluxos validados localmente.
 
-A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria. Os módulos de Check-in, Frequência e Relatórios estão implementados no backend e possuem testes automatizados e validações locais.
+A criação de eventos realiza a inscrição automática dos membros ativos, incluindo integrantes da Diretoria. Os módulos de Check-in, Frequência, Relatórios e Justificativas estão implementados no backend, com persistência PostgreSQL, autenticação JWT, autorização por perfil e 206 testes automatizados aprovados.
 
-A integração completa com o frontend ainda não deve ser considerada concluída. O controle de justificativas e a ampliação da cobertura de testes permanecem como próximas etapas.
+A integração completa com o frontend ainda não deve ser considerada concluída. Permanecem ajustes nos tipos de GUID, desativação dos mocks ativos por padrão, compatibilidade dos status e contratos do módulo de Eventos e conexão efetiva da tela de Relatórios. Esses ajustes dependem dos responsáveis pelo frontend e pelos módulos correspondentes.
 
 ---
 

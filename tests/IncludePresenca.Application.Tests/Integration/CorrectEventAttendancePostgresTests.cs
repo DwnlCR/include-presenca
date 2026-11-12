@@ -38,15 +38,15 @@ public sealed class CorrectEventAttendancePostgresTests
         Assert.Equal(EventParticipationStatus.Present, participation.Status);
         Assert.Equal(EventParticipationStatus.JustifiedAbsence, audit.PreviousStatus);
         Assert.Equal(EventParticipationStatus.Present, audit.NewStatus);
-        Assert.Equal(scenario.PreviousJustifiedAtUtc, audit.PreviousJustifiedAtUtc);
+        AssertTimestampEqual(scenario.PreviousJustifiedAtUtc, audit.PreviousJustifiedAtUtc);
         Assert.Equal(scenario.PreviousJustification, audit.PreviousJustification);
         Assert.Null(audit.NewJustifiedAtUtc);
         Assert.Null(audit.NewJustification);
         Assert.Null(audit.PreviousCheckedInAtUtc);
-        Assert.Equal(checkedInAtUtc, audit.NewCheckedInAtUtc);
+        AssertTimestampEqual(checkedInAtUtc, audit.NewCheckedInAtUtc);
         Assert.Equal(scenario.DirectorId, audit.ChangedByMemberId);
         Assert.Equal("Lista assinada conferida pela Diretoria", audit.Reason);
-        Assert.Equal(changedAtUtc, audit.ChangedAtUtc);
+        AssertTimestampEqual(changedAtUtc, audit.ChangedAtUtc);
         Assert.Equal(DateTimeKind.Utc, audit.ChangedAtUtc.Kind);
     }
 
@@ -73,7 +73,7 @@ public sealed class CorrectEventAttendancePostgresTests
             .CountAsync(item => item.ParticipationId == scenario.ParticipationId);
 
         Assert.Equal(EventParticipationStatus.Present, participation.Status);
-        Assert.Equal(scenario.PreviousCheckedInAtUtc, participation.CheckedInAtUtc);
+        AssertTimestampEqual(scenario.PreviousCheckedInAtUtc, participation.CheckedInAtUtc);
         Assert.Equal(0, auditCount);
     }
 
@@ -175,7 +175,7 @@ public sealed class CorrectEventAttendancePostgresTests
             .CountAsync(item => item.ParticipationId == scenario.ParticipationId);
 
         Assert.Equal(EventParticipationStatus.Present, participation.Status);
-        Assert.Equal(scenario.PreviousCheckedInAtUtc, participation.CheckedInAtUtc);
+        AssertTimestampEqual(scenario.PreviousCheckedInAtUtc, participation.CheckedInAtUtc);
         Assert.Equal(0, auditCount);
     }
 
@@ -306,6 +306,21 @@ public sealed class CorrectEventAttendancePostgresTests
             ? throw new InvalidOperationException(
                 "The PostgreSQL connection string should have been checked by PostgresFact.")
             : connectionString;
+    }
+
+    private static void AssertTimestampEqual(DateTime? expected, DateTime? actual)
+    {
+        Assert.Equal(TruncateToPostgresPrecision(expected), TruncateToPostgresPrecision(actual));
+    }
+
+    private static DateTime? TruncateToPostgresPrecision(DateTime? value)
+    {
+        if (value is null)
+            return null;
+
+        long precision = TimeSpan.TicksPerMicrosecond;
+        long ticks = value.Value.Ticks;
+        return new DateTime(ticks - ticks % precision, value.Value.Kind);
     }
 
     private sealed record Scenario(

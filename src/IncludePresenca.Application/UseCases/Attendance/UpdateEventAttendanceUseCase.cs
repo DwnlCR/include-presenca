@@ -1,6 +1,7 @@
 using IncludePresenca.Application.DTOs.Attendance;
 using IncludePresenca.Application.Interfaces;
 using IncludePresenca.Application.Interfaces.Repositories;
+using IncludePresenca.Application.Services;
 using IncludePresenca.Domain.Entities;
 using IncludePresenca.Domain.Enums;
 
@@ -34,8 +35,7 @@ public class UpdateEventAttendanceUseCase
         if (eventEntity.IsCancelled)
             throw new InvalidOperationException("Cannot update attendance for a cancelled event.");
 
-        if (!Enum.TryParse(request.Status, ignoreCase: true, out EventParticipationStatus status) ||
-            status == EventParticipationStatus.Pending)
+        if (!AttendanceStatusParser.TryParseFinal(request.Status, out EventParticipationStatus status))
             throw new ArgumentException("Only a final attendance status can be assigned.", nameof(request));
 
         EventParticipation participation = await _participationRepository
