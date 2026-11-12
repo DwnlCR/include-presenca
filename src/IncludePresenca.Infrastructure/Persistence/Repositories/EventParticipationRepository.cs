@@ -30,6 +30,16 @@ public class EventParticipationRepository : IEventParticipationRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<EventParticipation>> GetByEventIdsAsync(
+        List<Guid> eventIds,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.EventParticipations
+            .AsNoTracking()
+            .Where(participation => eventIds.Contains(participation.EventId))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<EventParticipation?> GetByEventAndMemberIdAsync(
         Guid eventId,
         Guid memberId,
